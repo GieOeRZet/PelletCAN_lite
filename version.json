@@ -1,0 +1,14 @@
+{
+  "firmware": {
+    "version": "1.0",
+    "changelog": [
+      "Pierwsza wersja lite: minimalny firmware tylko do odczytu (bez zapisu do kotła), jeden obieg CO."
+    ]
+  },
+  "card": {
+    "version": "1.0",
+    "changelog": [
+      "Pierwsza wersja lite: ekran główny, paliwo, CO, CWU, palnik i menu z pozycją „Informacje o programie”. Tylko odczyt."
+    ]
+  }
+}

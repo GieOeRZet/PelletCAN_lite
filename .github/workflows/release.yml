@@ -1,0 +1,59 @@
+# Reczne wydanie: Actions -> "Release" -> Run workflow.
+# Tag i tytul wpisujesz przy uruchomieniu (puste = wersja karty z version.json), opis bierze z pliku RELEASE_NOTES.md.
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag wydania, np. v1.1 (puste = v + wersja karty z version.json)"
+        required: false
+        default: ""
+      title:
+        description: "Tytul wydania (puste = nazwa tagu + pierwsza linia RELEASE_NOTES.md)"
+        required: false
+        default: ""
+      prerelease:
+        description: "Oznacz jako pre-release"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Ustal tag i tytul
+        id: meta
+        run: |
+          TAG="${{ github.event.inputs.tag }}"
+          if [ -z "$TAG" ]; then
+            TAG="v$(python3 -c "import json;print(json.load(open('version.json'))['card']['version'])")"
+          fi
+          TITLE="${{ github.event.inputs.title }}"
+          if [ -z "$TITLE" ]; then
+            TITLE="$TAG – $(head -n1 RELEASE_NOTES.md | sed 's/^# *//')"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "title=$TITLE" >> "$GITHUB_OUTPUT"
+
+      - name: Opis wydania (RELEASE_NOTES.md bez pierwszej linii z tytulem)
+        run: tail -n +2 RELEASE_NOTES.md > body.md
+
+      - name: Utworz wydanie
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PRE=""
+          if [ "${{ github.event.inputs.prerelease }}" = "true" ]; then PRE="--prerelease"; fi
+          if gh release view "${{ steps.meta.outputs.tag }}" >/dev/null 2>&1; then
+            echo "Wydanie ${{ steps.meta.outputs.tag }} juz istnieje - przerywam (usun je albo wpisz inny tag)."; exit 1
+          fi
+          gh release create "${{ steps.meta.outputs.tag }}" \
+            --target "${{ github.sha }}" \
+            --title "${{ steps.meta.outputs.title }}" \
+            --notes-file body.md $PRE

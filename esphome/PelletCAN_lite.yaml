@@ -1,0 +1,78 @@
+# =====================================================================
+# PelletCAN lite - Tekla / Estyma Igneo Touch -> Home Assistant: PLIK UZYTKOWNIKA (ten wgrywasz do ESP).
+# Wersja LITE = tylko odczyt kotla (bez zapisu nastaw, trybow i harmonogramow), jeden obieg CO.
+# Wlasciwy kod (logika, encje, CAN) pobiera sie sam z GitHuba przy kazdej kompilacji (packages na dole).
+# Ten plik zmieniasz tylko dla swoich ustawien - rdzenia nie edytujesz nigdy.
+# Aktualizacja: w ESPHome kliknij "Install" - pobierze najnowsza wersje rdzenia.
+# Hasla i klucz biora sie z secrets.yaml (wzor: secrets.example.yaml).
+# Historia zmian: CHANGELOG-firmware.md w repo.
+# =====================================================================
+substitutions:
+  # ===================================================================
+  # 1. WI-FI I ADRES IP
+  # ===================================================================
+  wifi_ssid: !secret wifi_ssid_iot
+  wifi_password: !secret wifi_pass
+  ap_pass: "11223344"        # haslo awaryjnej sieci "Tekla-Estyma Fallback" - jawne tutaj; WPA2 wymaga min. 8 znakow
+  # Staly adres IP: odkomentuj te trzy linie ORAZ czteroliniowy blok "wifi:" na dole pliku (razem, inaczej blad kompilacji).
+  # DHCP (domyslnie): zostaw wszystko zakomentowane.
+  # device_ip: 192.168.10.250
+  # device_gateway: 192.168.10.1
+  # device_subnet: 255.255.254.0
+
+  # ===================================================================
+  # 2. KLUCZ API I HASLO OTA
+  # ===================================================================
+  api_key: !secret esp_api_key_tekla_CAN
+  ota_password: !secret ota_pass
+
+  # ===================================================================
+  # 3. NAZWA URZADZENIA
+  # ===================================================================
+  name: tekla-estyma         # nazwa ESPHome / mDNS (encje dostana id typu sensor.tekla_kociol_temperatura)
+  friendly_name: "Tekla"     # nazwa w HA
+
+  # ===================================================================
+  # 4. ANTENA
+  # ===================================================================
+  # Antena zewnetrzna U.FL na XIAO ESP32-C6: "true" dopiero PO podpieciu anteny (bez niej Wi-Fi zniknie).
+  external_antenna: "false"
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+
+esp32:
+  board: seeed_xiao_esp32c6
+  framework:
+    type: esp-idf
+
+logger:
+  level: DEBUG
+  logs:
+    canbus: INFO  # wycisza "received can message" (sam ID, bez danych, zalewa log)
+
+web_server:
+
+captive_portal:
+
+api:
+  reboot_timeout: 0s
+  encryption:
+    key: ${api_key}
+  # Wersja lite nie udostepnia uslug (akcji) zapisu - tylko encje do odczytu.
+
+packages:
+  # Rdzen firmware lite z GitHuba (swiezy przy kazdej kompilacji).
+  tekla:
+    url: https://github.com/GieOeRZet/PelletCAN_lite
+    ref: main
+    files: [esphome/PelletCAN_lite_packages.yaml]
+    refresh: 0s   # zawsze swiezy rdzen z GitHuba przy kazdej kompilacji (bez cache)
+
+# Staly adres IP (opcjonalny): odkomentuj razem z device_ip / device_gateway / device_subnet w substitutions.
+# wifi:
+#   manual_ip:
+#     static_ip: ${device_ip}
+#     gateway: ${device_gateway}
+#     subnet: ${device_subnet}

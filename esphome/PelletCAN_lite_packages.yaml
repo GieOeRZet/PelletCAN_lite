@@ -1,0 +1,580 @@
+# =====================================================================
+# PelletCAN lite - RDZEN firmware (logika, CAN, encje). Pobierany przez ESPHome z GitHuba przy kazdej kompilacji (packages).
+# NIE edytuj lokalnie - swoje ustawienia masz w pliku PelletCAN_lite.yaml.
+# Historia zmian: CHANGELOG-firmware.md
+# =====================================================================
+# Estyma Igneo Touch (CAN I/O BIG) -> Home Assistant, wersja LITE:
+#  - TYLKO ODCZYT: ESP wysyla do kotla wylacznie zapytania o rejestry (SDO 0x40), nigdy zapisu; brak uslug (actions), przyciskow i przelacznikow.
+#  - jeden obieg CO, bez harmonogramow zapisu, nastaw, trybow, testu wyjsc, historii alarmow, skanerow i podsluchu magistrali.
+#  - XIAO ESP32-C6 + Seeed CAN Bus Breakout (MCP2515, kwarc 16 MHz), CANopen SDO, wezel kotla 0x04, 125 kbit/s.
+# Encje (nazwy jak w pelnym PelletCAN, wiec karta dziala z nimi tak samo): temperatury, pompy, palnik, zbiornik, podajniki, alarm, tryby (tylko tekst), harmonogramy (tylko do podgladu).
+substitutions:
+  fw_version: "1.0"
+
+esphome:
+  # name / friendly_name, esp32, logger, web_server, captive_portal oraz klucz API sa w pliku uzytkownika (PelletCAN_lite.yaml).
+  on_boot:
+    priority: 600
+    then:
+      - if:
+          condition:
+            lambda: 'return std::string("${external_antenna}") == "true";'
+          then:
+            - output.turn_off: rf_switch_enable
+            - delay: 100ms
+            - output.turn_on: rf_ant_select
+
+ota:
+  - platform: esphome
+    password: ${ota_password}
+
+wifi:
+  ssid: ${wifi_ssid}
+  password: ${wifi_password}
+  fast_connect: true
+  # Awaryjny punkt dostepu: gdy ESP nie polaczy sie z siecia, po ok. 1 min wystawia siec "Tekla-Estyma Fallback" (haslo: ap_pass).
+  ap:
+    ssid: "Tekla-Estyma Fallback"
+    password: ${ap_pass}
+  # Staly adres IP (opcjonalny): blok "wifi: manual_ip" w pliku uzytkownika; bez niego ESP bierze adres z DHCP.
+
+globals:
+  # Alarmy: najnowszy wpis bufora (kod + czas poczatku i konca) -> encja "Alarm aktywny"
+  - id: alarm_slot
+    type: int
+    initial_value: "-1"
+  - id: alarm_t0
+    type: uint32_t
+    initial_value: "0"
+  - id: alarm_code_now
+    type: int
+    initial_value: "0"
+  - id: alarm_flag_active
+    type: bool
+    initial_value: "false"
+  # Harmonogramy (24 bity na dzien, bit i = godzina i, 1 = komfort): CWU, CO obwod 1, kociol - tylko odczyt
+  - id: sch_cwu
+    type: std::vector<int32_t>
+  - id: sch_co
+    type: std::vector<int32_t>
+  - id: sch_boil
+    type: std::vector<int32_t>
+  - id: sch_burst
+    type: int
+    initial_value: "0"
+  - id: sch_k
+    type: int
+    initial_value: "0"
+  - id: sch_boot
+    type: bool
+    initial_value: "false"
+
+# Plytka Seeed CAN Bus Breakout na XIAO ESP32-C6.
+# SPI: SCK=D8 (GPIO19), MISO=D9 (GPIO20), MOSI=D10 (GPIO18), CS=D7 (GPIO17).
+# Zworka P1 na spodzie plytki = terminator 120 ohm (domyslnie rozlaczona).
+spi:
+  clk_pin: GPIO19
+  mosi_pin: GPIO18
+  miso_pin: GPIO20
+
+canbus:
+  - platform: mcp2515
+    id: igneo_can
+    cs_pin: GPIO17
+    can_id: 0x604          # nasze zapytania SDO do kotla (wezel 4)
+    bit_rate: 125KBPS      # predkosc magistrali panelu Igneo Touch
+    clock: 16MHZ           # kwarc plytki Seeed (nadruk 16.000)
+    data_rate: 1MHz        # wolniejsze SPI = pewniejsza komunikacja z MCP2515
+    # UWAGA: LISTENONLY wylaczylby wysylanie zapytan - nie uzywac.
+    on_frame:
+      # PDO modulu CAN IO BIG (wezel 86) 0x456: bajt 0 bit 0 = podajnik glowny pracuje.
+      - can_id: 0x456
+        then:
+          - lambda: |-
+              if (x.size() < 1) return;
+              id(feeder_running).publish_state((x[0] & 0x01) != 0);
+      # PDO 0x356: bajt 0 bit 0 = dmuchawa pracuje, bajt 2 bit 0 = podajnik palnika pracuje.
+      - can_id: 0x356
+        then:
+          - lambda: |-
+              if (x.size() < 1) return;
+              id(blower_running).publish_state((x[0] & 0x01) != 0);
+              if (x.size() >= 3) id(feeder2_running).publish_state((x[2] & 0x01) != 0);
+      # Odpowiedzi kotla (wezel 4) na zapytania SDO: 0x580 + 4.
+      - can_id: 0x584
+        then:
+          - lambda: |-
+              if (x.size() < 8) return;
+              const uint8_t cs = x[0];
+              const uint16_t idx = x[1] | (x[2] << 8);
+              const uint8_t sub = x[3];
+              // Odpowiedz upload expedited (0x42/0x43/0x4x): dane w 4 bajtach; inne (abort, potwierdzenia, segmenty) pomijamy.
+              if ((cs & 0xE0) != 0x40 || !(cs & 0x02) || sub != 0x01) return;
+              const bool size_given = (cs & 0x01);
+              const int n = size_given ? 4 - ((cs >> 2) & 0x03) : 4;
+              uint32_t raw = 0;
+              for (int i = 0; i < n; i++) raw |= ((uint32_t) x[4 + i]) << (8 * i);
+              // Harmonogramy: CWU 0x2154..0x2159 + 0x2160 (niedziela), CO obwod 1 = 0x2126 + 4*dzien, kociol 0x2209..0x220F.
+              {
+                int ci = -1, oi = -1, bi = -1;
+                if (idx >= 0x2154 && idx <= 0x2159) ci = idx - 0x2154; else if (idx == 0x2160) ci = 6;
+                if (idx >= 0x2126 && idx <= 0x2141 && ((idx - 0x2126) % 4) == 0) oi = (idx - 0x2126) / 4;
+                if (idx >= 0x2209 && idx <= 0x220F) bi = idx - 0x2209;
+                if (ci >= 0 || oi >= 0 || bi >= 0) {
+                  if (id(sch_cwu).size() != 7) id(sch_cwu).assign(7, -1);
+                  if (id(sch_co).size() != 7) id(sch_co).assign(7, -1);
+                  if (id(sch_boil).size() != 7) id(sch_boil).assign(7, -1);
+                  if (ci >= 0) id(sch_cwu)[ci] = (int32_t) (raw & 0xFFFFFF);
+                  if (oi >= 0) id(sch_co)[oi] = (int32_t) (raw & 0xFFFFFF);
+                  if (bi >= 0) id(sch_boil)[bi] = (int32_t) (raw & 0xFFFFFF);
+                  auto join_hex = [](const std::vector<int32_t> &v) {
+                    std::string o;
+                    char t[12];
+                    for (size_t k = 0; k < v.size(); k++) {
+                      if (v[k] < 0) snprintf(t, sizeof(t), "------"); else snprintf(t, sizeof(t), "%06X", (unsigned) v[k]);
+                      if (k) o += ' ';
+                      o += t;
+                    }
+                    return o;
+                  };
+                  if (ci >= 0) id(sch_cwu_txt).publish_state(join_hex(id(sch_cwu)));
+                  if (oi >= 0) id(sch_co_txt).publish_state(join_hex(id(sch_co)));
+                  if (bi >= 0) id(sch_boil_txt).publish_state(join_hex(id(sch_boil)));
+                  return;
+                }
+              }
+              // Skala: pomiary w dziesiatych stopnia; wartosci zadane kotla podaje w pelnych stopniach.
+              float div = 10.0f;
+              switch (idx) {
+                case 0x2004: case 0x2010: case 0x2012: case 0x201A: case 0x22AD:
+                  div = 1.0f;
+                  break;
+                default: break;
+              }
+              // Pompy i stan palnika: wartosc w mlodszym bajcie (starszy bajt = 1 to flaga).
+              const uint32_t low = raw & 0xFF;
+              // Tylko dolne 16 bitow (gorne bajty ramki bywaja smieciami).
+              const float t = (float) (int16_t) (raw & 0xFFFF) / div;
+
+              // --- alarmy: 0x404C = nastepna pozycja bufora; najnowszy = pozycja-1. Lancuch odczytow: kod (0x4010+slot) -> poczatek (0x4024+slot) -> koniec (0x4038+slot).
+              if (idx == 0x404C) {
+                const int last = ((int) (raw & 0xFF) + 19) % 20;
+                std::vector<uint8_t> d = {0x40, (uint8_t) ((0x4010 + last) & 0xFF), (uint8_t) ((0x4010 + last) >> 8), 0x01, 0, 0, 0, 0};
+                id(igneo_can)->send_data(0x604, false, d);
+                return;
+              }
+              if (idx >= 0x4010 && idx < 0x4024) {
+                const uint32_t code = raw & 0xFFFF;
+                id(alarm_slot) = (int) (idx - 0x4010);
+                id(alarm_code_now) = (int) code;
+                id(alarm_flag_active) = ((raw >> 16) & 1) != 0;
+                if (code == 0) { id(alarm_active).publish_state(false); return; }
+                std::vector<uint8_t> d = {0x40, (uint8_t) ((0x4024 + id(alarm_slot)) & 0xFF), (uint8_t) ((0x4024 + id(alarm_slot)) >> 8), 0x01, 0, 0, 0, 0};
+                id(igneo_can)->send_data(0x604, false, d);
+                return;
+              }
+              if (idx >= 0x4024 && idx < 0x4038) {
+                if ((int) (idx - 0x4024) != id(alarm_slot)) return;
+                id(alarm_t0) = raw;
+                std::vector<uint8_t> d = {0x40, (uint8_t) ((0x4038 + id(alarm_slot)) & 0xFF), (uint8_t) ((0x4038 + id(alarm_slot)) >> 8), 0x01, 0, 0, 0, 0};
+                id(igneo_can)->send_data(0x604, false, d);
+                return;
+              }
+              if (idx >= 0x4038 && idx < 0x404C) {
+                if ((int) (idx - 0x4038) != id(alarm_slot)) return;
+                // Aktywny: flaga aktywnosci albo brak czasu zakonczenia / koniec przed poczatkiem.
+                const bool open_end = (raw == 0) || (raw < id(alarm_t0));
+                id(alarm_active).publish_state(id(alarm_code_now) != 0 && (id(alarm_flag_active) || open_end));
+                return;
+              }
+
+              switch (idx) {
+                case 0x2001: id(boiler_temp).publish_state(t); break;
+                case 0x2004: id(boiler_set_result).publish_state(t); break;
+                case 0x4001: id(ch1_temp).publish_state(t); break;
+                case 0x22AD: id(ch1_set_result).publish_state(t); break;
+                case 0x2299: id(ch1_pump).publish_state(low != 0); break;
+                case 0x22B9: id(mixer_co1_state).publish_state((float) low); break;
+                case 0x216D: id(mixer_ret_state).publish_state((float) low); break;
+                case 0x2110: id(hw_temp).publish_state(t); break;
+                case 0x2010: id(hw_set_comfort).publish_state(t); break;
+                case 0x2012: id(hw_set_eco).publish_state(t); break;
+                case 0x201A: id(hw_set_result).publish_state(t); break;
+                case 0x2278: id(hw_pump).publish_state(low != 0); break;
+                case 0x215F: id(outside_temp).publish_state(t); break;
+                case 0x226C: id(burner_temp).publish_state((float) (int16_t) (raw & 0xFFFF) / 10.0f); break;
+                case 0x2272: id(fuel_test).publish_state((float) (raw & 0xFFFF) / 10.0f); id(burner_calc).execute(); break;
+                case 0x2292: id(fuel_heat).publish_state((float) (raw & 0xFF) / 10.0f); id(burner_calc).execute(); break;
+                case 0x4005: id(burner_power).publish_state((float) raw); id(burner_calc).execute(); break;
+                case 0x2257: id(p_feed_max).publish_state((float) (raw & 0xFFFF) / 10.0f); id(burner_calc).execute(); break;
+                case 0x3700: id(p_feeder_period).publish_state((float) (raw & 0xFFFF)); id(burner_calc).execute(); break;
+                case 0x2250: id(burner_flame).publish_state((float) low); break;
+                case 0x226D: id(burner_feed_time).publish_state((float) (raw & 0xFFFF) / 10.0f); break;
+                case 0x2007: {
+                  id(burner_state_code).publish_state((float) low);
+                  char unk[32];
+                  snprintf(unk, sizeof(unk), "nieznany (kod %u)", (unsigned) low);
+                  const char *s = unk;
+                  switch (low) {
+                    case 0: s = "Wylaczony"; break;
+                    case 1: s = "Rozpalanie"; break;
+                    case 2: s = "Zarzenie"; break;
+                    case 5: s = "Modulacja"; break;
+                    case 6: s = "Wygaszanie / czyszczenie"; break;
+                    case 7: s = "Czyszczenie"; break;
+                    case 8: s = "Pauza"; break;
+                    case 9: s = "Stop"; break;
+                    case 10: s = "Alarm"; break;
+                  }
+                  id(burner_state_text).publish_state(s);
+                  break;
+                }
+                case 0x2005: id(boiler_on).publish_state(low != 0); break;
+                case 0x2002: {
+                  char unk[32];
+                  snprintf(unk, sizeof(unk), "nieznany (kod %u)", (unsigned) raw);
+                  const char *s = unk;
+                  switch (raw) {
+                    case 0: s = "Czasowy auto"; break;
+                    case 1: s = "Czasowy reczny"; break;
+                    case 2: s = "Auto"; break;
+                    case 3: s = "Reczny"; break;
+                  }
+                  id(boiler_mode_text).publish_state(s);
+                  break;
+                }
+                case 0x2064:
+                case 0x2014: {
+                  const uint32_t m = raw & 0xFF;
+                  const char *s = m == 0 ? "Off" : m == 1 ? "Eko" : m == 2 ? "Harmonogram" : m == 3 ? "Komfort" : "nieznany";
+                  if (idx == 0x2064) id(co_mode_text).publish_state(s); else id(cwu_mode_text).publish_state(s);
+                  break;
+                }
+                case 0x2006: id(in_zakaz).publish_state((raw & 1) == 0); break;   // 257 = brak zakazu, 256 = zakaz
+                case 0x2254: id(blower_pct).publish_state((float) (raw & 0xFF)); break;
+                case 0x3600: {
+                  float c = (float) (raw & 0xFFFF);
+                  id(tank_cap).publish_state(c);
+                  float k = id(tank_kg).state;
+                  if (c > 0 && !isnan(k)) id(tank_pct).publish_state(roundf(k * 100.0f / c));
+                  break;
+                }
+                case 0x3601: {
+                  float k = (float) (raw & 0xFFFF);
+                  id(tank_kg).publish_state(k);
+                  float c = id(tank_cap).state;
+                  if (c > 0 && !isnan(c)) id(tank_pct).publish_state(roundf(k * 100.0f / c));
+                  break;
+                }
+                default: break;
+              }
+
+interval:
+  # Cykliczny odczyt rejestrow (jeden zapytanie na 250 ms). Tylko odczyt (SDO 0x40).
+  - interval: 250ms
+    then:
+      - lambda: |-
+          if (id(igneo_can)->is_failed()) return;  // brak MCP2515 - nie wysylamy
+          static const uint16_t idxs[] = {
+            0x2001, 0x2004,                                   // kociol: temperatura, zadana wynikowa
+            0x4001, 0x22AD, 0x2299, 0x22B9, 0x216D,           // CO obwod 1: temperatura, zadana wynikowa, pompa; mieszacze (CO1, powrotu)
+            0x2110, 0x2010, 0x2012, 0x201A, 0x2278,           // CWU: temperatura, zadana komfort / eco / wynikowa, pompa
+            0x215F,                                           // temperatura zewnetrzna
+            0x4005, 0x2007, 0x2002, 0x2005, 0x2254,           // moc palnika, stan palnika, tryb kotla, kociol wlaczony, obroty dmuchawy
+            0x3600, 0x3601,                                   // zbiornik: pojemnosc, ilosc paliwa
+            0x226C, 0x2250, 0x226D,                           // temperatura palnika, jasnosc plomienia, czas podawania palnika
+            0x2272, 0x2292, 0x2257, 0x3700,                   // skladniki mocy kW i spalania (paliwo test, wartosc opalowa, podawanie max, okres)
+            0x2064, 0x2014, 0x2006,                           // tryb pracy CO i CWU (tekst), zakaz rozpalenia
+            0x404C                                            // alarmy: pozycja bufora -> potem odczyt ostatniego wpisu
+          };
+          static size_t i = 0;
+          const size_t total = sizeof(idxs) / sizeof(idxs[0]);
+          if (i >= total) i = 0;
+          const uint16_t ix = idxs[i++];
+          std::vector<uint8_t> d = {0x40, (uint8_t) (ix & 0xFF), (uint8_t) (ix >> 8), 0x01, 0, 0, 0, 0};
+          id(igneo_can)->send_data(0x604, false, d);
+
+  # Harmonogramy (tylko do podgladu na karcie): 21 rejestrow co 300 ms, raz po starcie (30 s) i potem co 5 minut.
+  - interval: 300ms
+    then:
+      - lambda: |-
+          if (id(igneo_can)->is_failed()) return;
+          if (!id(sch_boot) && millis() > 30000) { id(sch_boot) = true; id(sch_k) = 0; id(sch_burst) = 21; }
+          if (id(sch_burst) <= 0) return;
+          static const uint16_t sch[] = {0x2154,0x2155,0x2156,0x2157,0x2158,0x2159,0x2160,
+            0x2126,0x212A,0x212E,0x2132,0x2136,0x213A,0x213E,
+            0x2209,0x220A,0x220B,0x220C,0x220D,0x220E,0x220F};
+          const uint16_t ix = sch[id(sch_k) % 21];
+          id(sch_k)++;
+          id(sch_burst)--;
+          std::vector<uint8_t> d = {0x40, (uint8_t) (ix & 0xFF), (uint8_t) (ix >> 8), 0x01, 0, 0, 0, 0};
+          id(igneo_can)->send_data(0x604, false, d);
+  - interval: 5min
+    then:
+      - lambda: |-
+          if (id(sch_boot) && id(sch_burst) <= 0) { id(sch_k) = 0; id(sch_burst) = 21; }
+
+  # Status CAN widoczny w HA (encja "CAN OK") + stan poczatkowy PDO (PDO moze przychodzic tylko przy zmianie - po 30 s bez ramki zakladamy "nie pracuje").
+  - interval: 5s
+    then:
+      - lambda: |-
+          id(can_ok).publish_state(!id(igneo_can)->is_failed());
+          if (millis() > 30000 && !id(feeder_running).has_state()) id(feeder_running).publish_state(false);
+          if (millis() > 30000 && !id(feeder2_running).has_state()) id(feeder2_running).publish_state(false);
+          if (millis() > 30000 && !id(blower_running).has_state()) id(blower_running).publish_state(false);
+
+# Moc palnika [kW] i spalanie [kg/h] liczone w ESP (jak w pelnym PelletCAN): sprawnosc kotla 0,90 (moc), 0,85 (spalanie).
+script:
+  - id: burner_calc
+    mode: restart
+    then:
+      - lambda: |-
+          const float test = id(fuel_test).state, tmax = id(p_feed_max).state, per = id(p_feeder_period).state;
+          const float cv = id(fuel_heat).state, p = id(burner_power).state;
+          if (isnan(test) || isnan(tmax) || isnan(per) || isnan(cv) || isnan(p) || per <= 0) return;
+          const float kgh100 = test * tmax / per;
+          const float kw = kgh100 * cv * 0.90f * p / 100.0f;
+          id(burner_kw).publish_state(roundf(kw * 10.0f) / 10.0f);
+          id(burner_fuel_rate).publish_state(roundf(kw / (cv * 0.85f) * 10.0f) / 10.0f);
+
+# Przelacznik antenowy XIAO ESP32-C6 (uzywany tylko gdy external_antenna: "true").
+output:
+  - platform: gpio
+    pin: GPIO3
+    id: rf_switch_enable
+  - platform: gpio
+    pin: GPIO14
+    id: rf_ant_select
+
+sensor:
+  - platform: template
+    id: boiler_temp
+    name: "Kociol temperatura"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    update_interval: never
+  - platform: template
+    id: boiler_set_result
+    name: "Kociol zadana wynikowa"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    update_interval: never
+  - platform: template
+    id: ch1_temp
+    name: "CO temperatura"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    update_interval: never
+  - platform: template
+    id: ch1_set_result
+    name: "CO zadana wynikowa"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    update_interval: never
+  - platform: template
+    id: hw_temp
+    name: "CWU temperatura"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    update_interval: never
+  - platform: template
+    id: hw_set_comfort
+    name: "CWU zadana komfort"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    update_interval: never
+  - platform: template
+    id: hw_set_eco
+    name: "CWU zadana ekonomiczna"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    update_interval: never
+  - platform: template
+    id: hw_set_result
+    name: "CWU zadana wynikowa"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    update_interval: never
+  - platform: template
+    id: outside_temp
+    name: "Temperatura zewnetrzna"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    update_interval: never
+  - platform: template
+    id: mixer_co1_state
+    name: "Mieszacz CO1 stan"
+    accuracy_decimals: 0
+    icon: "mdi:valve"
+    update_interval: never
+  - platform: template
+    id: mixer_ret_state
+    name: "Mieszacz powrotu stan"
+    accuracy_decimals: 0
+    icon: "mdi:valve"
+    update_interval: never
+  - platform: template
+    id: burner_power
+    name: "Moc palnika"
+    unit_of_measurement: "%"
+    update_interval: never
+  - platform: template
+    id: burner_kw
+    name: "Palnik moc"
+    unit_of_measurement: "kW"
+    accuracy_decimals: 1
+    icon: "mdi:fire"
+    update_interval: never
+  - platform: template
+    id: burner_fuel_rate
+    name: "Palnik spalanie"
+    unit_of_measurement: "kg/h"
+    accuracy_decimals: 1
+    icon: "mdi:grain"
+    update_interval: never
+  - platform: template
+    id: burner_temp
+    name: "Temperatura palnika"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    accuracy_decimals: 1
+    update_interval: never
+  - platform: template
+    id: burner_flame
+    name: "Palnik jasnosc plomienia"
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    icon: "mdi:fire"
+    update_interval: never
+  - platform: template
+    id: burner_feed_time
+    name: "Palnik czas podawania paliwa"
+    unit_of_measurement: "s"
+    accuracy_decimals: 1
+    icon: "mdi:timer-outline"
+    update_interval: never
+  - platform: template
+    id: burner_state_code
+    name: "Palnik kod stanu"
+    update_interval: never
+    entity_category: diagnostic
+  - platform: template
+    id: blower_pct
+    name: "Dmuchawa obroty"
+    unit_of_measurement: "%"
+    icon: "mdi:fan"
+    update_interval: never
+  - platform: template
+    id: tank_cap
+    name: "Zbiornik pojemnosc"
+    unit_of_measurement: "kg"
+    icon: "mdi:silo"
+    update_interval: never
+  - platform: template
+    id: tank_kg
+    name: "Zbiornik paliwo"
+    unit_of_measurement: "kg"
+    icon: "mdi:grain"
+    update_interval: never
+  - platform: template
+    id: tank_pct
+    name: "Zbiornik zapelnienie"
+    unit_of_measurement: "%"
+    icon: "mdi:gauge"
+    accuracy_decimals: 0
+    update_interval: never
+  # Skladniki obliczen mocy i spalania - tylko wewnetrzne (nie pojawiaja sie w HA).
+  - platform: template
+    id: fuel_test
+    internal: true
+    update_interval: never
+  - platform: template
+    id: fuel_heat
+    internal: true
+    update_interval: never
+  - platform: template
+    id: p_feed_max
+    internal: true
+    update_interval: never
+  - platform: template
+    id: p_feeder_period
+    internal: true
+    update_interval: never
+
+binary_sensor:
+  - platform: template
+    id: can_ok
+    name: "CAN OK"
+    device_class: connectivity
+    entity_category: diagnostic
+  - platform: template
+    id: boiler_on
+    name: "Kociol wlaczony"
+    device_class: running
+  - platform: template
+    id: alarm_active
+    name: "Alarm aktywny"
+    device_class: problem
+  - platform: template
+    id: ch1_pump
+    name: "CO pompa"
+    device_class: running
+  - platform: template
+    id: hw_pump
+    name: "CWU pompa"
+    device_class: running
+  - platform: template
+    id: blower_running
+    name: "Dmuchawa pracuje"
+    device_class: running
+    icon: "mdi:fan"
+  - platform: template
+    id: feeder_running
+    name: "Podajnik pracuje"
+    device_class: running
+    icon: "mdi:screw-lag"
+  - platform: template
+    id: feeder2_running
+    name: "Podajnik palnika pracuje"
+    device_class: running
+    icon: "mdi:screw-lag"
+  - platform: template
+    id: in_zakaz
+    name: "Zakaz rozpalenia"
+    icon: "mdi:fire-off"
+
+text_sensor:
+  - platform: template
+    name: "Wersja firmware"
+    id: fw_ver
+    entity_category: diagnostic
+    lambda: 'return std::string("${fw_version}") + " (lite)";'
+  - platform: template
+    id: burner_state_text
+    name: "Palnik stan"
+  - platform: template
+    id: boiler_mode_text
+    name: "Kociol tryb pracy"
+  - platform: template
+    id: co_mode_text
+    name: "CO tryb"
+    icon: "mdi:radiator"
+  - platform: template
+    id: cwu_mode_text
+    name: "CWU tryb"
+    icon: "mdi:water-boiler"
+  - platform: template
+    id: sch_cwu_txt
+    name: "CWU harmonogram (rejestry)"
+    icon: "mdi:calendar-clock"
+    entity_category: diagnostic
+  - platform: template
+    id: sch_co_txt
+    name: "CO harmonogram (rejestry)"
+    icon: "mdi:calendar-clock"
+    entity_category: diagnostic
+  - platform: template
+    id: sch_boil_txt
+    name: "Kociol harmonogram (rejestry)"
+    icon: "mdi:calendar-clock"
+    entity_category: diagnostic
