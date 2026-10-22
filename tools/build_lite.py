@@ -47,6 +47,10 @@ def rename(t):
 core = rename(core)
 card = rename(card)
 card = card.replace('window.__igneoCard', 'window.__pcLiteCard')
+for t in ('__igneoFind', '__igneoImg', '__tekla80', '__teklaDefs', '__teklaLvl', '__pcLang'):
+    card = card.replace('window.' + t, 'window.' + t.replace('__igneo', '__pcLite').replace('__tekla', '__pcLite').replace('__pcLang', '__pcLiteLang'))
+    core = core.replace('window.' + t, 'window.' + t.replace('__igneo', '__pcLite').replace('__tekla', '__pcLite').replace('__pcLang', '__pcLiteLang'))
+card = card.replace('(HACS: /hacsfiles/PelletCAN/, recznie: /local/community/igneo-ha/)', '(HACS: /hacsfiles/PelletCAN_lite/)')
 card = card.replace("DIR + 'pelletcan-lite-core.js?v=62&_='", "DIR + 'pelletcan-lite-core.js?v=' + %s + '&_='" % json.dumps(VER))
 card = card.replace("'pelletcan-lite-card', name: 'PelletCAN-card'", "'pelletcan-lite-card', name: 'PelletCAN lite'")
 card = card.replace("description: 'Panel kotła pelletowego (replika panelu Igneo Touch) dla PelletCAN'", "description: 'PelletCAN lite: podgląd kotła pelletowego (tylko odczyt)'")

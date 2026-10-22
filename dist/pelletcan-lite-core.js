@@ -79,7 +79,7 @@ const CDLG = {
   cwu: { lo1: 20, hi1: 70, lo2: 20, hi2: 70, step: 1, dec: 0, w1: 0, w2: 1, ck: 'cwu_comfort', ek: 'cwu_eco', mk: 'cwu_mode' } };
 const MX = [28, 42.5, 57, 71.5]; // środki ikon trybów w oknach (cqw); suwak trybu: left 24, width 52
 // poziom menu (serwis): odblokowanie PIN-em, wazne 5 min od ostatniej aktywnosci w karcie (pamiec modulu + sessionStorage)
-const LVL = window.__teklaLvl = window.__teklaLvl || { t: 0 };
+const LVL = window.__pcLiteLvl = window.__pcLiteLvl || { t: 0 };
 try { LVL.t = Math.max(LVL.t, +sessionStorage.getItem('tekla_lvl') || 0); } catch (e) {}
 const LVL_MS = 300000, SERVICE = ['fanmod', 'test'];
 const LIVE = ['main', 'water', 'heat', 'burn'];

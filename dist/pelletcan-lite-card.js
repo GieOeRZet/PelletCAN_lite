@@ -15,7 +15,7 @@
       console.warn('pelletcan-lite-core v7.8: element juz zarejestrowany (stara wersja w pamieci strony) - zrob twarde odswiezenie (Ctrl+F5)');
       return;
     }
-    const DIR = new URL('.', import.meta.url).pathname; // katalog tego pliku (HACS: /hacsfiles/PelletCAN/, recznie: /local/community/igneo-ha/)
+    const DIR = new URL('.', import.meta.url).pathname; // katalog tego pliku (HACS: /hacsfiles/PelletCAN_lite/)
     let code = await (await fetch(DIR + 'pelletcan-lite-core.js?v=' + "1.0" + '&_=' + Date.now())).text();
     const EDITS = [
 {
@@ -226,7 +226,7 @@
 {
 "t": "x",
 "old": "class TeklaPanelCard extends HTMLElement {",
-"new": "window.__teklaDefs = { ENT_GROUPS, ROLE_KEY, SCREEN_OPTS };\nclass TeklaPanelCard extends HTMLElement {"
+"new": "window.__pcLiteDefs = { ENT_GROUPS, ROLE_KEY, SCREEN_OPTS };\nclass TeklaPanelCard extends HTMLElement {"
 },
 {
 "t": "x",
@@ -379,7 +379,7 @@
     if (C.prototype.__v80) return;
     C.prototype.__v80 = true;
 
-    const W = window.__tekla80 = window.__tekla80 || { t: Date.now(), init: false, card: null };
+    const W = window.__pcLite80 = window.__pcLite80 || { t: Date.now(), init: false, card: null };
     const LOCK_MS = 300000;
     // rola -> koncowka entity_id (po nazwach z ESPHome)
     const NEW = {
@@ -774,7 +774,7 @@
     const BASE = new URL('.', import.meta.url).pathname + 'img/';
     const EXT = ['png', 'webp', 'jpg', 'jpeg', 'svg'];
     const stamp = Date.now(); // plik jest pobierany swiezo przy kazdym odswiezeniu strony
-    const IM = window.__igneoImg = window.__igneoImg || {};
+    const IM = window.__pcLiteImg = window.__pcLiteImg || {};
     const probe = url => new Promise(res => { const im = new Image(); im.onload = () => res(true); im.onerror = () => res(false); im.src = url; });
     const pick = async name => {
       const urls = EXT.map(x => BASE + name + '.' + x + '?v=' + stamp);
@@ -817,7 +817,7 @@
     const C = customElements.get('pelletcan-lite-core');
     if (C.prototype.__v92) return;
     C.prototype.__v92 = true;
-    const W = window.__tekla80, D = window.__teklaDefs || { ENT_GROUPS: [], ROLE_KEY: {}, SCREEN_OPTS: [] };
+    const W = window.__pcLite80, D = window.__pcLiteDefs || { ENT_GROUPS: [], ROLE_KEY: {}, SCREEN_OPTS: [] };
     const ROLE_DOM = {};
     D.ENT_GROUPS.forEach(g => g[1].forEach(f => { ROLE_DOM[f[0]] = f[2]; }));
     const keysAll = () => Object.assign({}, D.ROLE_KEY, (W && W.NEW) || {});
@@ -831,7 +831,7 @@
       const c = ids.filter(id => { const i = id.indexOf('.'), o = id.slice(i + 1); return doms.includes(id.slice(0, i)) && (!pf || o.includes(pf)) && re.test(o); }).sort((a, b) => (live(b) - live(a)) || a.length - b.length);
       return c[0] || '';
     };
-    window.__igneoFind = { findRole, keysAll, ROLE_DOM };
+    window.__pcLiteFind = { findRole, keysAll, ROLE_DOM };
     // wykrywanie urzadzenia: encje-kotwice z ESP (np. ..._poziom_dostepu) -> prefiks = reszta nazwy; najlepsze = najwiecej kotwic
     const ANCH = ['poziom_dostepu', 'test_wyjsc_stany', 'wersja_firmware', 'tryb_mirror', 'can_ok', 'alarm_aktywny'];
     const devices = ids => {
@@ -844,7 +844,7 @@
       if (x) return x;
       const d = ids ? devices(ids) : []; return d.length ? d[0].p.split('_').pop() : 'tekla';   // prefiks bazowy (czesc nazwy po nazwie pomieszczenia), bo czesc encji ma tylko tekla_, a czesc kotlownia_tekla_
     };
-    window.__igneoFind.devices = devices; window.__igneoFind.pfOf = pfOf;
+    window.__pcLiteFind.devices = devices; window.__pcLiteFind.pfOf = pfOf;
     // usluga ESP: wezel wykrywany z uslug esphome (<wezel>_set_param), chyba ze podano esphome_node
     const on0 = C.prototype._node;
     C.prototype._node = function () {
@@ -942,7 +942,7 @@
         const schema = [{
           type: 'expandable', title: 'Ogólne', expanded: true, flatten: true, schema: [
             { name: 'screen', label: 'Ekran startowy karty', selector: { select: { mode: 'dropdown', options: D.SCREEN_OPTS.map(o => ({ value: o[0], label: o[1] })) } } },
-            { name: 'language', label: 'Język / Language', selector: { select: { mode: 'dropdown', options: [{ value: 'auto', label: 'Auto (język Home Assistant)' }].concat(Object.keys((window.__pcLang || {}).names || {}).map(k => ({ value: k, label: window.__pcLang.names[k] }))) } } },
+            { name: 'language', label: 'Język / Language', selector: { select: { mode: 'dropdown', options: [{ value: 'auto', label: 'Auto (język Home Assistant)' }].concat(Object.keys((window.__pcLiteLang || {}).names || {}).map(k => ({ value: k, label: window.__pcLiteLang.names[k] }))) } } },
             { name: 'device', label: 'Urządzenie (prefiks encji)', selector: { select: { mode: 'dropdown', custom_value: true, options: [{ value: 'auto', label: 'Automatycznie' + (devs.length ? ' (' + pf + ')' : '') }].concat(devs.map(d => ({ value: d.p, label: d.p }))) } } },
           ],
         }, {
