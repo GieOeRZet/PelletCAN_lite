@@ -1,8 +1,8 @@
-/* PelletCAN lite v2.2 - karta tylko do odczytu, poziom podstawowy (ekran glowny, paliwo, CO, CWU, palnik, nastawy, harmonogram, alarmy, INFO).
+/* PelletCAN lite v2.3 - karta tylko do odczytu, poziom podstawowy (ekran glowny, paliwo, CO, CWU, palnik, nastawy, harmonogram, alarmy, INFO).
    Typ karty: custom:pelletcan-card-lite. Plik generowany: tools/build_lite.py (zrodlo: repo PelletCAN). Nie edytuj recznie.
    Karta zawiera wylacznie kod podgladu: bez zapisu do kotla i bez ekranow wyzszych poziomow menu. */
-/* PelletCAN-card v1.10 - JEDEN plik wejsciowy karty Tekla/Estyma Igneo Touch (zastepuje lancuch pelletcan-lite-core-v78 ... v86).
-   Rejestruje karte custom:pelletcan-lite-core (tryb lite: lite: true w konfiguracji karty; typ pelletcan-lite-core_lite = alias).
+/* PelletCAN-card - JEDEN plik wejsciowy karty Tekla/Estyma Igneo Touch (wersja karty: patrz CARD_VER nizej i version.json).
+   Rejestruje karte custom:pelletcan-card-lite (stary typ custom:pelletcan-lite-core dziala dalej; tryb lite: lite: true w konfiguracji karty; typ pelletcan-lite-core_lite = alias).
    Dziala tak: pobiera rdzen pelletcan-lite-core.js (z tego samego katalogu) (baza v6.9), naklada poprawki (lista EDITS) i dolacza moduly:
      poprawki ekranow (menu, PROGRAM, NASTAWY) | paski harmonogramu | poziomy dostepu z ESP + parametry palnika/CWU | Antylegionella | Ogrzewanie 1
      | czas podawania | historia alarmow z kotla | grafiki z folderu img/ | autor na ekranie INFO | v9.2: automatyczne wykrywanie encji, tryb lite (lite: true w YAML), nowy edytor.
@@ -1155,7 +1155,8 @@ if (!customElements.get('pelletcan-lite-core-editor')) customElements.define('pe
         const BS = { 11: [105, 126], 12: [108, 141] }, bt = this._cfg && FULL(this) ? BS[+this._cfg.boiler_image] : null;
         // obrazy kotla 11/12 maja inne proporcje niz domyslny: skala 1:1 jak w panelu, srodek i podstawa jak dla kociola domyslnego
         const boil = bt ? `.boil{width:${(bt[0] * K).toFixed(2)}cqw!important;left:${(15 - bt[0] * K / 2).toFixed(2)}cqw!important;top:${(35.5 - bt[1] * K).toFixed(2)}cqw!important;height:auto!important}` : '';
-        return oc.call(this) + boil + `.sp{position:relative;display:inline-block;line-height:0}.sp img,.mbs{mix-blend-mode:screen}.sp img{position:absolute;left:0;top:0;width:100%;height:100%;opacity:0}.sp img:first-child{opacity:1}
+        const burn = FULL(this) ? `.burn{left:6.9cqw!important;top:19.1cqw!important;width:${(149 * K).toFixed(2)}cqw!important;height:auto!important}` : '';   // obraz palnika 17 (149x99 px) 1:1 jak w panelu
+        return oc.call(this) + boil + burn + `.sp{position:relative;display:inline-block;line-height:0}.sp img,.mbs{mix-blend-mode:screen}.sp img{position:absolute;left:0;top:0;width:100%;height:100%;opacity:0}.sp img:first-child{opacity:1}
         .sp.on img{animation:spfr .45s linear infinite}.sp.on img:nth-child(2){animation-delay:.15s}.sp.on img:nth-child(3){animation-delay:.3s}
         @keyframes spfr{0%,33.3%{opacity:1}33.4%,100%{opacity:0}}.sp.on img:first-child{opacity:0}.sp.slow img{animation-duration:1.5s}.sp.slow img:nth-child(2){animation-delay:.5s}.sp.slow img:nth-child(3){animation-delay:1s}
         .ftk.pk{background:url(${U(54)}) 0 0/100% 100% no-repeat!important;border:0!important}.ftk.pk .fth,.ftk.pk .fhd{display:none}
@@ -1361,7 +1362,7 @@ if (!customElements.get('pelletcan-lite-core-editor')) customElements.define('pe
     const C = customElements.get('pelletcan-lite-core');
     if (C.prototype.__v93) return;
     C.prototype.__v93 = true;
-    const CARD_VER = '2.2';
+    const CARD_VER = '2.3';
     const MAN = 'https://raw.githubusercontent.com/GieOeRZet/PelletCAN_lite/main/version.json';
     const SK = 'pelletcan_lite_upd_skip';
     const U = window.__pcLiteUpd = window.__pcLiteUpd || { m: null, t: 0 };

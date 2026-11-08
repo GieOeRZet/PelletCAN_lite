@@ -2,6 +2,9 @@
 
 Historia zmian firmware: [CHANGELOG-firmware.md](CHANGELOG-firmware.md).
 
+## 2.3
+- Ekran Palnik przy `grafiki: pelne`: obraz palnika w skali 1:1 jak na panelu i w tym samym miejscu (wcześniej mniejszy i przesunięty). Zmiana z pełnej karty 1.41.
+
 ## 2.2
 - Dodany pakiet grafik panela (`dist/img/panel`), opcja grafik pełnych działa jak w pełnej karcie.
 
