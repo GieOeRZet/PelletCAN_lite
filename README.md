@@ -92,6 +92,7 @@ Ustawienia w pliku użytkownika: `wifi_ssid`, `wifi_password`, `ap_pass` (hasło
 3. Dodaj kartę:
 ```yaml
 type: custom:pelletcan-card-lite
+grafiki: pelne        # opcjonalnie: grafiki pełne (też w edytorze karty)
 ```
 Encje karta znajduje sama po końcówkach nazw (urządzenie „Tekla”). Gdy nazwałeś urządzenie inaczej, dodaj `entity_prefix: moj_prefiks` lub użyj edytora karty.
 

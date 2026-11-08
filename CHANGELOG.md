@@ -2,6 +2,9 @@
 
 Historia zmian firmware: [CHANGELOG-firmware.md](CHANGELOG-firmware.md).
 
+## 2.2
+- Dodany pakiet grafik panela (`dist/img/panel`), opcja grafik pełnych działa jak w pełnej karcie.
+
 ## 2.1
 - Element karty: `custom:pelletcan-card-lite` (zamiast `pelletcan-lite-card`).
 - Drobne poprawki interfejsu, nowe zrzuty ekranu.

@@ -8,10 +8,9 @@
     ]
   },
   "card": {
-    "version": "2.1",
+    "version": "2.2",
     "changelog": [
-      "Zmiana nazwy elementu: custom:pelletcan-card-lite (jak oryginał z dopiskiem lite) – zamiast pelletcan-lite-card.",
-      "Drobne poprawki interfejsu, nowe zrzuty ekranu w README."
+      "Dodane grafiki panela (dist/img/panel) – opcja „Grafiki panela: Pełne” w edytorze karty (wentylator, podajniki, zawór, grzałka, kocioł, palnik) działa jak w pełnej karcie."
     ]
   }
 }

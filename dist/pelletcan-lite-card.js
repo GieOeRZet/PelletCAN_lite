@@ -1,4 +1,4 @@
-/* PelletCAN lite v2.1 - karta tylko do odczytu, poziom podstawowy (ekran glowny, paliwo, CO, CWU, palnik, nastawy, harmonogram, alarmy, INFO).
+/* PelletCAN lite v2.2 - karta tylko do odczytu, poziom podstawowy (ekran glowny, paliwo, CO, CWU, palnik, nastawy, harmonogram, alarmy, INFO).
    Typ karty: custom:pelletcan-card-lite. Plik generowany: tools/build_lite.py (zrodlo: repo PelletCAN). Nie edytuj recznie.
    Karta zawiera wylacznie kod podgladu: bez zapisu do kotla i bez ekranow wyzszych poziomow menu. */
 /* PelletCAN-card v1.10 - JEDEN plik wejsciowy karty Tekla/Estyma Igneo Touch (zastepuje lancuch pelletcan-lite-core-v78 ... v86).
@@ -1361,7 +1361,7 @@ if (!customElements.get('pelletcan-lite-core-editor')) customElements.define('pe
     const C = customElements.get('pelletcan-lite-core');
     if (C.prototype.__v93) return;
     C.prototype.__v93 = true;
-    const CARD_VER = '2.1';
+    const CARD_VER = '2.2';
     const MAN = 'https://raw.githubusercontent.com/GieOeRZet/PelletCAN_lite/main/version.json';
     const SK = 'pelletcan_lite_upd_skip';
     const U = window.__pcLiteUpd = window.__pcLiteUpd || { m: null, t: 0 };
