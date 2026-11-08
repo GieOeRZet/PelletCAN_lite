@@ -5,7 +5,7 @@ Historia zmian firmware: [CHANGELOG-firmware.md](CHANGELOG-firmware.md).
 ## v2.0 – Poziom podstawowy z pełnej karty (tylko odczyt)
 - Karta lite budowana z pełnej karty PelletCAN 1.39 (`tools/build_lite.py`): ekran główny, Paliwo, CO, CWU, Palnik oraz Menu z ekranami Kocioł, Palnik, Ogrzewanie obwód 1, CWU, Informacje i Alarmy – tylko poziom podstawowy.
 - Wszystko tylko do podglądu: można wejść w ekrany, tryb ogrzewania i harmonogram, ale nie da się niczego zmienić; wywołania usług zapisu są zablokowane w karcie.
-- Usunięte menu „Poziom menu” i wszystkie pozycje spoza poziomu podstawowego.
+- Usunięte menu „Poziom menu” i wszystkie pozycje spoza poziomu podstawowego. Z kodu karty wycięto też zapisy do kotła, PIN, Test wyjść, Statystyki, Sieć, Konfigurację i wszystkie nastawy wyższych poziomów (jeden plik `pelletcan-lite-card.js`, bez pliku rdzenia).
 
 ## v1.0 – Pierwsza wersja lite
 - Karta `custom:pelletcan-lite-card` (HACS): ekran główny, okno Paliwo (zapełnienie zbiornika), Ogrzewanie 1 (CO), Woda (CWU), Palnik oraz Menu z jedną pozycją „Informacje o programie”.

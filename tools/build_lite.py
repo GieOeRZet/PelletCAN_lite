@@ -2,8 +2,7 @@
 """Buduje karte PelletCAN_lite z kodu pelnej karty PelletCAN.
 
 Uzycie:  python3 tools/build_lite.py [sciezka_do_repo_PelletCAN]   (domyslnie ../tekla-igneo-ha)
-Wynik:   dist/pelletcan-lite-card.js (loader + poprawki + modul lite)
-         dist/pelletcan-lite-core.js (rdzen z przemianowanymi elementami)
+Wynik:   dist/pelletcan-lite-card.js (jeden plik: rdzen + poprawki + modul lite, przyciety do poziomu podstawowego)
 Lite = poziom podstawowy (0) pelnej karty, tylko podglad: ekran glowny, paliwo, CO, CWU, palnik, menu bez "Poziom menu", nastawy poziomu 0,
 harmonogram, historia alarmow i INFO; zero zapisow do kotla.
 """
@@ -59,77 +58,19 @@ card = card.replace("DIR + 'pelletcan-lite-core.js?v=62&_='", "DIR + 'pelletcan-
 card = card.replace("'pelletcan-lite-card', name: 'PelletCAN-card'", "'pelletcan-lite-card', name: 'PelletCAN lite'")
 card = card.replace("description: 'Panel kotła pelletowego (replika panelu Igneo Touch) dla PelletCAN'", "description: 'PelletCAN lite: podgląd kotła pelletowego (tylko odczyt)'")
 
-LITE = r"""
-    // ---- modul LITE: poziom podstawowy, wylacznie podglad (zadnych zapisow do kotla) ----
-    await (async () => {
-    const C = customElements.get('pelletcan-lite-core');
-    if (C.prototype.__lite) return;
-    C.prototype.__lite = true;
-    // ekrany dostepne w lite: glowny, menu poziomu 0 (bez "Poziom menu"), nastawy tylko do odczytu, harmonogram i historia alarmow (podglad), INFO
-    const GO_OK = ['main', 'heat', 'water', 'burn', 'menu', 'info', 'kociol', 'boiler', 'burner_s', 'co_s', 'cwu_s', 'alarm', 'prog'];
-    // akcje: tylko otwieranie/zamykanie okien i podglad; wszystko co zmienia wartosc jest odciete
-    const ACT_OK = ['fuel', 'ok', 'cancel', 'more', 'updskip', 'zq', 'quick', 'bdlg', 'cdlg', 'prog'];
-    const sc = C.prototype.setConfig;
-    C.prototype.setConfig = function (c) {
-      const scr = c && GO_OK.includes(c.screen) ? c.screen : 'main';
-      return sc.call(this, Object.assign({}, c, { mirror: true, lite: true, screen: scr }));
-    };
-    C.prototype._mirror = function () { return true; };
-    C.prototype._svc = function () { /* lite: brak uslug zapisu */ };
-    C.prototype._lvl = function () { return 0; };
-    C.prototype._unl = function () { return false; };
-    // okna trybu/temperatur: OK tylko zamyka, nic nie zapisuje
-    C.prototype._commit = function () { this._modal = false; this._render(true); };
-    C.prototype._fcGo = function () {};
-    C.prototype._fuelStep = function () {};
-    // twarda blokada: zadna usluga HA nie jest wywolywana przez te karte
-    const hd = Object.getOwnPropertyDescriptor(C.prototype, 'hass');
-    if (hd && hd.set) Object.defineProperty(C.prototype, 'hass', {
-      configurable: true, get: hd.get,
-      set(v) { hd.set.call(this, v && typeof v === 'object' ? Object.assign(Object.create(v), { callService: () => Promise.resolve() }) : v); }
-    });
-    const og = C.prototype._go;
-    C.prototype._go = function (s, b) { if (!GO_OK.includes(s)) return; return og.call(this, s, b); };
-    // menu poziomu 0 jak na panelu; "Poziom menu (PIN)" i pozycje serwisowe znikaja same (lite: true w pelnej karcie)
-    // wiersze nastaw i przelaczniki zostaja jako sam podglad: bez data-act/data-go zapisu, kursor zwykly
-    const DEAD = '[data-act]:not([data-act="' + ACT_OK.join('"]):not([data-act="') + '"]),[data-go]:not([data-go="' + GO_OK.join('"]):not([data-go="') + '"])';
-    const orr = C.prototype._render;
-    C.prototype._render = function () {
-      const r = orr.apply(this, arguments);
-      const scr = this.shadowRoot && this.shadowRoot.getElementById('scr');
-      if (scr) scr.querySelectorAll('.fts,.fch').forEach(n => n.remove());
-      if (scr) scr.querySelectorAll(DEAD).forEach(n => {
-        const a = n.dataset.act, g = n.dataset.go;
-        if (a === 'fuelpm' || a === 'feedgo' || a === 'confirm' || a === 'toggle' || (g && g !== 'alarm')) n.remove();
-        else { n.removeAttribute('data-act'); n.removeAttribute('data-go'); n.style.cursor = 'default'; }
-      });
-      return r;
-    };
-    const ob = C.prototype._build;
-    C.prototype._build = function () {
-      ob.apply(this, arguments);
-      const R = this.shadowRoot;
-      const guard = e => {
-        const a = e.target.closest && e.target.closest('[data-go],[data-act]');
-        if (!a) return;
-        const ok = a.dataset.go ? GO_OK.includes(a.dataset.go) : ACT_OK.includes(a.dataset.act);
-        if (!ok) { e.stopPropagation(); e.preventDefault(); }
-      };
-      R.addEventListener('click', guard, true);
-      R.addEventListener('pointerdown', guard, true);
-    };
-    })();
-"""
-marker = '  } catch (e) { console.error'
-i = card.index(marker)
-card = card[:i] + LITE + card[i:]
-card = card.replace("console.error('pelletcan-lite-card', e)", "console.error('pelletcan-lite-card', e)")
+import subprocess, tempfile
+tmp = Path(tempfile.mkdtemp())
+(tmp / 'card.js').write_text(card, encoding='utf-8')
+(tmp / 'core.js').write_text(core, encoding='utf-8')
+T = ROOT / 'tools'
+subprocess.run([str(T / 'stage.sh'), str(tmp / 'card.js'), str(tmp / 'core.js'), str(tmp / 'pruned.js')], check=True)
+subprocess.run(['node', str(T / 'roles.js'), str(tmp / 'pruned.js'), str(tmp / 'final.js')], check=True)
+card = (tmp / 'final.js').read_text(encoding='utf-8')
 
-header = '''/* PelletCAN lite v%s - karta tylko do odczytu, poziom podstawowy (ekran glowny, paliwo, CO, CWU, palnik, nastawy poziomu 0, harmonogram, alarmy, INFO).
+header = '''/* PelletCAN lite v%s - karta tylko do odczytu, poziom podstawowy (ekran glowny, paliwo, CO, CWU, palnik, nastawy, harmonogram, alarmy, INFO).
    Typ karty: custom:pelletcan-lite-card. Plik generowany: tools/build_lite.py (zrodlo: repo PelletCAN). Nie edytuj recznie.
-   Dziala tak: pobiera rdzen pelletcan-lite-core.js (ten sam katalog), nakłada poprawki i modul lite (bez zapisow do kotla). */
+   Karta zawiera wylacznie kod podgladu: bez zapisu do kotla i bez ekranow wyzszych poziomow menu. */
 ''' % VER
 card = header + card
 (ROOT / 'dist' / 'pelletcan-lite-card.js').write_text(card, encoding='utf-8')
-(ROOT / 'dist' / 'pelletcan-lite-core.js').write_text(core, encoding='utf-8')
-print('OK', VER, len(card), len(core))
+print('OK', VER, len(card))

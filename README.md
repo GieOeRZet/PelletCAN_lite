@@ -76,6 +76,7 @@ Karta sprawdza plik `version.json` **tego** repozytorium (`GieOeRZet/PelletCAN_l
 - **Harmonogramy pojawiają się po ok. 30 s od startu ESP**, potem odświeżają się co 5 minut.
 
 ## Struktura
-- `dist/` – karta (`pelletcan-lite-card.js` + `pelletcan-lite-core.js` + `img/`), generowana skryptem `tools/build_lite.py` z kodu pełnej karty.
+- `dist/` – karta (jeden plik `pelletcan-lite-card.js` + `img/`), generowana skryptem `tools/build_lite.py` z kodu pełnej karty; zawiera tylko kod podglądu poziomu podstawowego (bez zapisu do kotła i bez ekranów wyższych poziomów).
+- `tools/` – skrypty budujące kartę lite.
 - `esphome/` – pliki firmware i wzór `secrets.yaml`.
 - `version.json` – wersje karty i firmware (karta pokazuje dostępne aktualizacje w „Informacje o programie”).
