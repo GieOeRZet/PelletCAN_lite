@@ -9,7 +9,7 @@
 #  - XIAO ESP32-C6 + Seeed CAN Bus Breakout (MCP2515, kwarc 16 MHz), CANopen SDO, wezel kotla 0x04, 125 kbit/s.
 # Encje (nazwy jak w pelnym PelletCAN, wiec karta dziala z nimi tak samo): temperatury, pompy, palnik, zbiornik, podajniki, alarm, tryby (tylko tekst), harmonogramy (tylko do podgladu).
 substitutions:
-  fw_version: "1.0"
+  fw_version: "2.0"
 
 esphome:
   # name / friendly_name, esp32, logger, web_server, captive_portal oraz klucz API sa w pliku uzytkownika (PelletCAN_lite.yaml).
@@ -50,6 +50,33 @@ globals:
     type: int
     initial_value: "0"
   - id: alarm_flag_active
+    type: bool
+    initial_value: "false"
+  # Historia alarmow (20 slotow: kod 0x4010+i, poczatek 0x4024+i, koniec 0x4038+i) - tylko odczyt
+  - id: ah_raw
+    type: std::vector<uint32_t>
+  - id: ah_t0
+    type: std::vector<uint32_t>
+  - id: ah_t1
+    type: std::vector<uint32_t>
+  - id: ah_txt
+    type: std::vector<std::string>
+  - id: alarm_last_slot
+    type: int
+    initial_value: "-1"
+  - id: alarm_pos
+    type: int
+    initial_value: "-1"
+  - id: alarm_flag_conf
+    type: bool
+    initial_value: "false"
+  - id: ah_boot
+    type: bool
+    initial_value: "false"
+  # Kolejka odczytu ustawien poziomu podstawowego (tylko odczyt)
+  - id: par_q
+    type: std::vector<uint16_t>
+  - id: par_boot
     type: bool
     initial_value: "false"
   # Harmonogramy (24 bity na dzien, bit i = godzina i, 1 = komfort): CWU, CO obwod 1, kociol - tylko odczyt
@@ -146,7 +173,7 @@ canbus:
               // Skala: pomiary w dziesiatych stopnia; wartosci zadane kotla podaje w pelnych stopniach.
               float div = 10.0f;
               switch (idx) {
-                case 0x2004: case 0x2010: case 0x2012: case 0x201A: case 0x22AD:
+                case 0x2003: case 0x2004: case 0x2010: case 0x2012: case 0x201A: case 0x22AD:
                   div = 1.0f;
                   break;
                 default: break;
@@ -156,39 +183,152 @@ canbus:
               // Tylko dolne 16 bitow (gorne bajty ramki bywaja smieciami).
               const float t = (float) (int16_t) (raw & 0xFFFF) / div;
 
-              // --- alarmy: 0x404C = nastepna pozycja bufora; najnowszy = pozycja-1. Lancuch odczytow: kod (0x4010+slot) -> poczatek (0x4024+slot) -> koniec (0x4038+slot).
+              // --- bufor alarmow: 0x404C = nastepna pozycja, 0x4010+i = alarm i ---
               if (idx == 0x404C) {
+                // Rejestr = 256 + pozycja (0..19); najnowszy alarm = pozycja-1 (potwierdzone znacznikami czasu).
+                const int oldpos = id(alarm_pos);
+                id(alarm_pos) = (int) (raw & 0xFF);
                 const int last = ((int) (raw & 0xFF) + 19) % 20;
+                id(alarm_last_slot) = last;
+                if (oldpos != id(alarm_pos) && id(ah_boot)) id(alarm_hist_q).execute();  // nowy alarm -> przeladuj cala historie
                 std::vector<uint8_t> d = {0x40, (uint8_t) ((0x4010 + last) & 0xFF), (uint8_t) ((0x4010 + last) >> 8), 0x01, 0, 0, 0, 0};
                 id(igneo_can)->send_data(0x604, false, d);
                 return;
               }
               if (idx >= 0x4010 && idx < 0x4024) {
+                const int hs = (int) (idx - 0x4010);
+                if (id(ah_raw).size() < 20) { id(ah_raw).assign(20, 0); id(ah_t0).assign(20, 0); id(ah_t1).assign(20, 0); id(ah_txt).assign(20, std::string()); }
+                id(ah_raw)[hs] = raw;
+                const bool is_last = (hs == id(alarm_last_slot)) || id(alarm_last_slot) < 0;
+                if (is_last) id(alarm_slot) = hs;
                 const uint32_t code = raw & 0xFFFF;
-                id(alarm_slot) = (int) (idx - 0x4010);
+                const bool active = (raw >> 16) & 1;
+                const bool confirmed = (raw >> 17) & 1;
+                // Nazwy alarmow: dopisuj kolejne kody, gdy je poznasz (z panelu / bufora alarmow).
+                const char *aname = "";
+                switch (code) {
+                  case 1: aname = " (czujnik kotla)"; break;
+                  case 2: aname = " (przegrzanie kotla)"; break;
+                  case 3: aname = " (czujnik powrotu)"; break;
+                  case 4: aname = " (czujnik temp. podajnika)"; break;
+                  case 5: aname = " (STB)"; break;
+                  case 6: aname = " (przegrzanie podajnika)"; break;
+                  case 7: aname = " (lancuch bezpieczenstwa)"; break;
+                  case 8: aname = " (czujnik spalin)"; break;
+                  case 20: aname = " (czujnik pokojowy CO1)"; break;
+                  case 21: aname = " (czujnik pokojowy CO2)"; break;
+                  case 22: aname = " (czujnik pokojowy CO3)"; break;
+                  case 23: aname = " (czujnik pokojowy CO4)"; break;
+                  case 24: aname = " (czujnik CO1)"; break;
+                  case 25: aname = " (czujnik CO2)"; break;
+                  case 26: aname = " (czujnik CO3)"; break;
+                  case 27: aname = " (czujnik CO4)"; break;
+                  case 30: aname = " (czujnik CWU)"; break;
+                  case 31: aname = " (czujnik bufora gora)"; break;
+                  case 32: aname = " (czujnik bufora dol)"; break;
+                  case 40: aname = " (czujnik solar 1)"; break;
+                  case 41: aname = " (czujnik solar 2)"; break;
+                  case 42: aname = " (czujnik solar 3)"; break;
+                  case 43: aname = " (czujnik solar 4)"; break;
+                  case 50: aname = " (rezerwa paliwa)"; break;
+                  case 51: aname = " (brak paliwa w zasobniku)"; break;
+                  case 100: aname = " (brak komunikacji z modulem 0)"; break;
+                  case 101: aname = " (brak komunikacji z modulem 1)"; break;
+                  case 102: aname = " (brak komunikacji z modulem 2)"; break;
+                  case 103: aname = " (brak komunikacji z modulem 3)"; break;
+                  case 104: aname = " (brak komunikacji z modulem 4)"; break;
+                  case 105: aname = " (brak komunikacji z modulem 5)"; break;
+                  case 106: aname = " (brak komunikacji z modulem 6)"; break;
+                  case 107: aname = " (brak komunikacji z modulem 7)"; break;
+                  case 110: aname = " (brak komunikacji z modulem BIG)"; break;
+                  case 115: aname = " (brak komunikacji z modulem lambda)"; break;
+                  case 116: aname = " (brak komunikacji z modulem MINI 0)"; break;
+                  case 117: aname = " (brak komunikacji z modulem MINI 1)"; break;
+                  case 118: aname = " (brak komunikacji z modulem MINI 2)"; break;
+                  case 119: aname = " (brak komunikacji z modulem MINI 3)"; break;
+                  case 120: aname = " (brak komunikacji z modulem MINI 4)"; break;
+                  case 121: aname = " (brak komunikacji z modulem MINI 5)"; break;
+                  case 122: aname = " (brak komunikacji z modulem MINI 6)"; break;
+                  case 123: aname = " (brak komunikacji z modulem MINI 7)"; break;
+                  case 130: aname = " (faza czyszczenia)"; break;
+                  case 131: aname = " (blad wygaszania)"; break;
+                  case 140: aname = " (brak ognia/opalu)"; break;
+                  case 150: aname = " (dodatkowy magazyn: brak paliwa/max)"; break;
+                  case 151: aname = " (dodatkowy magazyn: rezerwa)"; break;
+                  case 160: aname = " (wymiennik do czyszczenia)"; break;
+                  case 161: aname = " (palnik do czyszczenia)"; break;
+                  case 200: aname = " (ruszt)"; break;
+                  case 201: aname = " (awaria dmuchawy)"; break;
+                  case 202: aname = " (drzwi kotla otwarte)"; break;
+                  case 203: aname = " (bardzo niski poziom tlenu)"; break;
+                  default: break;
+                }
+                char a[96];
+                snprintf(a, sizeof(a), "kod %u%s%s%s", (unsigned) code, aname, active ? ", aktywny" : "", confirmed ? ", oczekuje" : "");
+                id(ah_txt)[hs] = (code == 0) ? std::string() : std::string(a);
+                id(ah_publish).execute(hs);
+                if (!is_last) return;  // odczyt historii: nie ruszamy "ostatniego alarmu"
+                id(alarm_last_text).publish_state(code == 0 ? "brak" : a);
                 id(alarm_code_now) = (int) code;
-                id(alarm_flag_active) = ((raw >> 16) & 1) != 0;
-                if (code == 0) { id(alarm_active).publish_state(false); return; }
-                std::vector<uint8_t> d = {0x40, (uint8_t) ((0x4024 + id(alarm_slot)) & 0xFF), (uint8_t) ((0x4024 + id(alarm_slot)) >> 8), 0x01, 0, 0, 0, 0};
+                id(alarm_flag_active) = active;
+                id(alarm_flag_conf) = confirmed;
+                if (code == 0) { id(alarm_active).publish_state(false); id(alarm_start_text).publish_state("0"); id(alarm_end_text).publish_state("0"); return; }
+                // lancuch odczytow: czas poczatku (0x4024+slot), potem czas konca (0x4038+slot)
+                const int sl = (int) (idx - 0x4010);
+                std::vector<uint8_t> d = {0x40, (uint8_t) ((0x4024 + sl) & 0xFF), (uint8_t) ((0x4024 + sl) >> 8), 0x01, 0, 0, 0, 0};
                 id(igneo_can)->send_data(0x604, false, d);
                 return;
               }
               if (idx >= 0x4024 && idx < 0x4038) {
+                if (id(ah_raw).size() < 20) { id(ah_raw).assign(20, 0); id(ah_t0).assign(20, 0); id(ah_t1).assign(20, 0); id(ah_txt).assign(20, std::string()); }
+                id(ah_t0)[idx - 0x4024] = raw;
+                id(ah_publish).execute((int) (idx - 0x4024));
                 if ((int) (idx - 0x4024) != id(alarm_slot)) return;
+              }
+              if (idx >= 0x4024 && idx < 0x4038 && (int) (idx - 0x4024) == id(alarm_slot)) {
                 id(alarm_t0) = raw;
-                std::vector<uint8_t> d = {0x40, (uint8_t) ((0x4038 + id(alarm_slot)) & 0xFF), (uint8_t) ((0x4038 + id(alarm_slot)) >> 8), 0x01, 0, 0, 0, 0};
+                id(alarm_start_text).publish_state(std::to_string((unsigned) raw));
+                const int sl = (int) (idx - 0x4024);
+                std::vector<uint8_t> d = {0x40, (uint8_t) ((0x4038 + sl) & 0xFF), (uint8_t) ((0x4038 + sl) >> 8), 0x01, 0, 0, 0, 0};
                 id(igneo_can)->send_data(0x604, false, d);
                 return;
               }
               if (idx >= 0x4038 && idx < 0x404C) {
+                if (id(ah_raw).size() < 20) { id(ah_raw).assign(20, 0); id(ah_t0).assign(20, 0); id(ah_t1).assign(20, 0); id(ah_txt).assign(20, std::string()); }
+                id(ah_t1)[idx - 0x4038] = raw;
+                id(ah_publish).execute((int) (idx - 0x4038));
                 if ((int) (idx - 0x4038) != id(alarm_slot)) return;
-                // Aktywny: flaga aktywnosci albo brak czasu zakonczenia / koniec przed poczatkiem.
+              }
+              if (idx >= 0x4038 && idx < 0x404C && (int) (idx - 0x4038) == id(alarm_slot)) {
+                id(alarm_end_text).publish_state(std::to_string((unsigned) raw));
+                // Aktywny: (flaga aktywnosci albo brak czasu zakonczenia / koniec przed poczatkiem)
                 const bool open_end = (raw == 0) || (raw < id(alarm_t0));
                 id(alarm_active).publish_state(id(alarm_code_now) != 0 && (id(alarm_flag_active) || open_end));
                 return;
               }
 
+
               switch (idx) {
+                case 0x2003: id(boiler_set_manual).publish_state(t); break;
+                case 0x2146: id(ch1_set_manual).publish_state((float) low); break;
+                case 0x2032: id(co_set_comfort).publish_state(t); break;
+                case 0x2048: id(co_set_eco).publish_state(t); break;
+                case 0x2273: id(air_corr).publish_state((float) (int16_t) (raw & 0xFFFF)); break;
+                case 0x2270: id(power_min).publish_state((float) (raw & 0xFF)); break;
+                case 0x2271: id(power_max).publish_state((float) (raw & 0xFF)); break;
+                case 0x4000: id(ret_temp).publish_state(t); break;
+                case 0x2208: id(boiler_hyst_on).publish_state((float) (raw & 0xFFFF)); break;
+                case 0x2291: id(boiler_hyst_off).publish_state((float) (raw & 0xFFFF)); break;
+                case 0x22BD: id(co1_hyst).publish_state((float) low / 10.0f); break;
+                case 0x22C1: id(co1_calib).publish_state((float) (int16_t) (raw & 0xFFFF) / 10.0f); break;
+                case 0x2142: id(co1_mode).publish_state((float) low); break;
+                case 0x22C5: id(co1_curve_m20).publish_state((float) low); break;
+                case 0x22C9: id(co1_curve_0).publish_state((float) low); break;
+                case 0x22CD: id(co1_curve_10).publish_state((float) low); break;
+                case 0x2212: id(cwu_hyst).publish_state((float) (raw & 0xFFFF)); break;
+                case 0x2210: id(cwu_boost).publish_state((float) low); break;
+                case 0x300D: id(cwu_prio).publish_state((float) low); break;
+                case 0x2297: id(cwu_legion).publish_state((float) low); break;
                 case 0x2001: id(boiler_temp).publish_state(t); break;
                 case 0x2004: id(boiler_set_result).publish_state(t); break;
                 case 0x4001: id(ch1_temp).publish_state(t); break;
@@ -294,6 +434,31 @@ interval:
           std::vector<uint8_t> d = {0x40, (uint8_t) (ix & 0xFF), (uint8_t) (ix >> 8), 0x01, 0, 0, 0, 0};
           id(igneo_can)->send_data(0x604, false, d);
 
+  # Kolejka odczytu ustawien poziomu podstawowego + historia alarmow: jeden rejestr na 200 ms (tylko odczyt, SDO 0x40).
+  # Po starcie (40 s) czytamy wszystko, potem ustawienia odswiezamy co 60 s (zmiany z panelu widac na karcie).
+  - interval: 200ms
+    then:
+      - lambda: |-
+          if (id(igneo_can)->is_failed()) return;
+          static const uint16_t st[] = {0x2003,0x2146,0x2032,0x2048,0x2273,0x2270,0x2271,0x4000,0x2208,0x2291,0x22BD,0x22C1,0x2142,0x22C5,0x22C9,0x22CD,0x2212,0x2210,0x300D,0x2297};
+          if (!id(par_boot) && millis() > 40000) {
+            id(par_boot) = true;
+            for (auto r : st) id(par_q).push_back(r);
+            id(ah_boot) = true;
+            id(alarm_hist_q).execute();
+          }
+          static uint32_t t_ref = 0;
+          if (id(par_boot) && millis() - t_ref > 60000UL && id(par_q).empty()) {
+            t_ref = millis();
+            for (auto r : st) id(par_q).push_back(r);
+          }
+          auto &q = id(par_q);
+          if (q.empty()) return;
+          const uint16_t ix = q.front();
+          q.erase(q.begin());
+          std::vector<uint8_t> d = {0x40, (uint8_t) (ix & 0xFF), (uint8_t) (ix >> 8), 0x01, 0, 0, 0, 0};
+          id(igneo_can)->send_data(0x604, false, d);
+
   # Harmonogramy (tylko do podgladu na karcie): 21 rejestrow co 300 ms, raz po starcie (30 s) i potem co 5 minut.
   - interval: 300ms
     then:
@@ -325,6 +490,32 @@ interval:
 
 # Moc palnika [kW] i spalanie [kg/h] liczone w ESP (jak w pelnym PelletCAN): sprawnosc kotla 0,90 (moc), 0,85 (spalanie).
 script:
+  # Kolejkuje odczyt calej historii alarmow z kotla (20 slotow: kody, czasy poczatku i konca)
+  - id: alarm_hist_q
+    mode: single
+    then:
+      - lambda: |-
+          auto &q = id(par_q);
+          if (q.size() > 100) return;
+          for (int i = 0; i < 20; i++) q.push_back((uint16_t) (0x4010 + i));
+          for (int i = 0; i < 20; i++) q.push_back((uint16_t) (0x4024 + i));
+          for (int i = 0; i < 20; i++) q.push_back((uint16_t) (0x4038 + i));
+  # Publikuje wpis historii: "kod ...|poczatek (unix)|koniec (unix)"; pusty slot = "-"
+  - id: ah_publish
+    mode: queued
+    max_runs: 60
+    parameters:
+      slot: int
+    then:
+      - lambda: |-
+          if (slot < 0 || slot > 19 || id(ah_raw).size() < 20) return;
+          text_sensor::TextSensor *s[] = {id(ah_0), id(ah_1), id(ah_2), id(ah_3), id(ah_4), id(ah_5), id(ah_6), id(ah_7), id(ah_8), id(ah_9), id(ah_10), id(ah_11), id(ah_12), id(ah_13), id(ah_14), id(ah_15), id(ah_16), id(ah_17), id(ah_18), id(ah_19)};
+          std::string o = "-";
+          if (!id(ah_txt)[slot].empty()) {
+            char b[40]; snprintf(b, sizeof(b), "|%u|%u", (unsigned) id(ah_t0)[slot], (unsigned) id(ah_t1)[slot]);
+            o = id(ah_txt)[slot] + b;
+          }
+          s[slot]->publish_state(o);
   - id: burner_calc
     mode: restart
     then:
@@ -347,6 +538,140 @@ output:
     id: rf_ant_select
 
 sensor:
+  - platform: template
+    id: boiler_set_manual
+    name: "Kociol zadana reczna"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    update_interval: never
+  - platform: template
+    id: ch1_set_manual
+    name: "CO zadana reczna"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    update_interval: never
+  - platform: template
+    id: co_set_comfort
+    name: "CO zadana komfort"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    accuracy_decimals: 1
+    update_interval: never
+  - platform: template
+    id: co_set_eco
+    name: "CO zadana ekonomiczna"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    accuracy_decimals: 1
+    update_interval: never
+  - platform: template
+    id: air_corr
+    name: "Korekta powietrza"
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    icon: "mdi:air-filter"
+    update_interval: never
+  - platform: template
+    id: power_min
+    name: "Moc min"
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    icon: "mdi:arrow-collapse-down"
+    update_interval: never
+  - platform: template
+    id: power_max
+    name: "Moc max"
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    icon: "mdi:arrow-collapse-up"
+    update_interval: never
+  - platform: template
+    id: ret_temp
+    name: "Temperatura powrotu"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    accuracy_decimals: 1
+    update_interval: never
+  - platform: template
+    id: boiler_hyst_on
+    name: "Histereza zalaczenia kotla"
+    unit_of_measurement: "°C"
+    accuracy_decimals: 0
+    icon: "mdi:thermometer-chevron-down"
+    update_interval: never
+  - platform: template
+    id: boiler_hyst_off
+    name: "Histereza wylaczenia kotla"
+    unit_of_measurement: "°C"
+    accuracy_decimals: 0
+    icon: "mdi:thermometer-chevron-up"
+    update_interval: never
+  - platform: template
+    id: co1_hyst
+    name: "CO1 histereza"
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+    icon: "mdi:thermometer-lines"
+    update_interval: never
+  - platform: template
+    id: co1_calib
+    name: "CO1 kalibracja czujnika"
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+    icon: "mdi:tune"
+    update_interval: never
+  - platform: template
+    id: co1_mode
+    name: "CO1 tryb pracy (0 reczny / 1 pogodowy)"
+    accuracy_decimals: 0
+    icon: "mdi:weather-partly-cloudy"
+    update_interval: never
+  - platform: template
+    id: co1_curve_m20
+    name: "CO1 krzywa pogodowa -20 C"
+    unit_of_measurement: "°C"
+    accuracy_decimals: 0
+    icon: "mdi:chart-line"
+    update_interval: never
+  - platform: template
+    id: co1_curve_0
+    name: "CO1 krzywa pogodowa 0 C"
+    unit_of_measurement: "°C"
+    accuracy_decimals: 0
+    icon: "mdi:chart-line"
+    update_interval: never
+  - platform: template
+    id: co1_curve_10
+    name: "CO1 krzywa pogodowa +10 C"
+    unit_of_measurement: "°C"
+    accuracy_decimals: 0
+    icon: "mdi:chart-line"
+    update_interval: never
+  - platform: template
+    id: cwu_hyst
+    name: "CWU histereza"
+    unit_of_measurement: "°C"
+    accuracy_decimals: 0
+    icon: "mdi:thermometer-lines"
+    update_interval: never
+  - platform: template
+    id: cwu_boost
+    name: "CWU zagrzej teraz (0/1)"
+    accuracy_decimals: 0
+    icon: "mdi:water-boiler-alert"
+    update_interval: never
+  - platform: template
+    id: cwu_prio
+    name: "CWU priorytet (0/1)"
+    accuracy_decimals: 0
+    icon: "mdi:priority-high"
+    update_interval: never
+  - platform: template
+    id: cwu_legion
+    name: "CWU antylegionella"
+    accuracy_decimals: 0
+    icon: "mdi:bacteria-outline"
+    update_interval: never
   - platform: template
     id: boiler_temp
     name: "Kociol temperatura"
@@ -544,6 +869,95 @@ binary_sensor:
     icon: "mdi:fire-off"
 
 text_sensor:
+  - platform: template
+    id: alarm_last_text
+    name: "Ostatni alarm"
+  - platform: template
+    id: alarm_start_text
+    name: "Alarm poczatek"
+  - platform: template
+    id: alarm_end_text
+    name: "Alarm koniec"
+  - platform: template
+    id: ah_0
+    name: "Alarm wpis 1"
+    entity_category: diagnostic
+  - platform: template
+    id: ah_1
+    name: "Alarm wpis 2"
+    entity_category: diagnostic
+  - platform: template
+    id: ah_2
+    name: "Alarm wpis 3"
+    entity_category: diagnostic
+  - platform: template
+    id: ah_3
+    name: "Alarm wpis 4"
+    entity_category: diagnostic
+  - platform: template
+    id: ah_4
+    name: "Alarm wpis 5"
+    entity_category: diagnostic
+  - platform: template
+    id: ah_5
+    name: "Alarm wpis 6"
+    entity_category: diagnostic
+  - platform: template
+    id: ah_6
+    name: "Alarm wpis 7"
+    entity_category: diagnostic
+  - platform: template
+    id: ah_7
+    name: "Alarm wpis 8"
+    entity_category: diagnostic
+  - platform: template
+    id: ah_8
+    name: "Alarm wpis 9"
+    entity_category: diagnostic
+  - platform: template
+    id: ah_9
+    name: "Alarm wpis 10"
+    entity_category: diagnostic
+  - platform: template
+    id: ah_10
+    name: "Alarm wpis 11"
+    entity_category: diagnostic
+  - platform: template
+    id: ah_11
+    name: "Alarm wpis 12"
+    entity_category: diagnostic
+  - platform: template
+    id: ah_12
+    name: "Alarm wpis 13"
+    entity_category: diagnostic
+  - platform: template
+    id: ah_13
+    name: "Alarm wpis 14"
+    entity_category: diagnostic
+  - platform: template
+    id: ah_14
+    name: "Alarm wpis 15"
+    entity_category: diagnostic
+  - platform: template
+    id: ah_15
+    name: "Alarm wpis 16"
+    entity_category: diagnostic
+  - platform: template
+    id: ah_16
+    name: "Alarm wpis 17"
+    entity_category: diagnostic
+  - platform: template
+    id: ah_17
+    name: "Alarm wpis 18"
+    entity_category: diagnostic
+  - platform: template
+    id: ah_18
+    name: "Alarm wpis 19"
+    entity_category: diagnostic
+  - platform: template
+    id: ah_19
+    name: "Alarm wpis 20"
+    entity_category: diagnostic
   - platform: template
     name: "Wersja firmware"
     id: fw_ver

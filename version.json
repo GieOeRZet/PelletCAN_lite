@@ -1,14 +1,17 @@
 {
   "firmware": {
-    "version": "1.0",
+    "version": "2.0",
     "changelog": [
-      "Pierwsza wersja lite: minimalny firmware tylko do odczytu (bez zapisu do kotła), jeden obieg CO."
+      "Podgląd ustawień poziomu podstawowego (tylko odczyt): zadane kotła/CO/CWU, histereza, krzywa pogodowa CO, moc min/max, korekta powietrza, temperatura powrotu, antylegionella, priorytet CWU.",
+      "Historia alarmów z kotła (Ostatni alarm, Alarm początek/koniec, Alarm wpis 1–20).",
+      "Nadal wyłącznie odczyt – brak zapisu do kotła."
     ]
   },
   "card": {
-    "version": "1.0",
+    "version": "2.0",
     "changelog": [
-      "Pierwsza wersja lite: ekran główny, paliwo, CO, CWU, palnik i menu z pozycją „Informacje o programie”. Tylko odczyt."
+      "Karta lite zbudowana z pełnej karty 1.39: tylko poziom podstawowy, wszystko tylko do podglądu (można wejść w ekrany, nic nie da się zmienić).",
+      "Usunięte menu „Poziom menu” oraz wszystkie pozycje spoza poziomu podstawowego; dodane ekrany nastaw Kocioł/Palnik/CO/CWU, Informacje i alarmy (odczyt)."
     ]
   }
 }

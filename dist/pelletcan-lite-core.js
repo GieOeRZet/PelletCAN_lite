@@ -80,7 +80,7 @@ const CDLG = {
 const MX = [28, 42.5, 57, 71.5]; // środki ikon trybów w oknach (cqw); suwak trybu: left 24, width 52
 // poziom menu (serwis): odblokowanie PIN-em, wazne 5 min od ostatniej aktywnosci w karcie (pamiec modulu + sessionStorage)
 const LVL = window.__pcLiteLvl = window.__pcLiteLvl || { t: 0 };
-try { LVL.t = Math.max(LVL.t, +sessionStorage.getItem('tekla_lvl') || 0); } catch (e) {}
+try { LVL.t = Math.max(LVL.t, +sessionStorage.getItem('pcl_lvl') || 0); } catch (e) {}
 const LVL_MS = 300000, SERVICE = ['fanmod', 'test'];
 const LIVE = ['main', 'water', 'heat', 'burn'];
 const IMG = () => window.TEKLA_IMG || {}; // grafiki: tekla-panel-burner.js (kocioł + palnik, WebP)
@@ -92,15 +92,15 @@ class TeklaPanelCard extends HTMLElement {
     this.SCH = Object.assign({}, SCHED_DEF, this._cfg.schedules || {});
     this._scr = this._cfg.screen || 'main'; this._backTo = 'main';
     this._modal = false; this._scroll = {}; this._sig = '';
-    if (!document.getElementById('tekla-font')) {
-      const l = document.createElement('link'); l.id = 'tekla-font'; l.rel = 'stylesheet';
+    if (!document.getElementById('pcl-font')) {
+      const l = document.createElement('link'); l.id = 'pcl-font'; l.rel = 'stylesheet';
       l.href = 'https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@300;400;700&display=swap';
       document.head.appendChild(l);
     }
     if (c && c.screen === 'quick') { this._scr = 'main'; this._modal = true; }
     if (c && c.screen === 'fuel') { this._scr = 'main'; this._modal = 'fuel'; }
     this._lvlTimer();
-    if (!this._imgL) { this._imgL = () => this._built && this._render(true); window.addEventListener('tekla-img', this._imgL); }
+    if (!this._imgL) { this._imgL = () => this._built && this._render(true); window.addEventListener('pcl-img', this._imgL); }
     if (!this.shadowRoot) this._build();
     else this._render(true);
   }
@@ -118,7 +118,7 @@ class TeklaPanelCard extends HTMLElement {
 
   /* ---------- helpers ---------- */
   _unl() { return Date.now() - LVL.t < LVL_MS; }
-  _lvlSet(on) { LVL.t = on ? Date.now() : 0; try { sessionStorage.setItem('tekla_lvl', String(LVL.t)); } catch (e) {} this._lvlTimer(); }
+  _lvlSet(on) { LVL.t = on ? Date.now() : 0; try { sessionStorage.setItem('pcl_lvl', String(LVL.t)); } catch (e) {} this._lvlTimer(); }
   _touch() { if (this._unl()) this._lvlSet(true); }
   _lvlTimer() { clearTimeout(this._lt); if (this._unl()) this._lt = setTimeout(() => this._built && this._render(true), LVL_MS + 500); }
   // ---- zapis do ESP (usługi esphome.<węzeł>_...) i odczyt harmonogramów ----

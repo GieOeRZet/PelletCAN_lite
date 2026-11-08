@@ -1,6 +1,6 @@
 # PelletCAN lite
 
-Wersja **lite** projektu [PelletCAN](https://github.com/GieOeRZet/PelletCAN): karta Home Assistant (HACS) i minimalny firmware ESPHome do **podglądu** kotła pelletowego Estyma / Tekla Igneo Touch przez CAN (XIAO ESP32-C6 + MCP2515). **Tylko odczyt** – nic nie jest zapisywane do kotła.
+Wersja **lite** projektu [PelletCAN](https://github.com/GieOeRZet/PelletCAN): karta Home Assistant (HACS) i firmware ESPHome do **podglądu** kotła pelletowego Estyma / Tekla Igneo Touch przez CAN (XIAO ESP32-C6 + MCP2515). **Tylko odczyt** – nic nie jest zapisywane do kotła.
 
 Projekt stworzony przez Romana Gorza (pomysł, kierunek, testy na własnej instalacji) z pomocą Claude – asystenta AI firmy Anthropic, który pomagał przy pisaniu kodu i dokumentacji.
 
@@ -29,7 +29,7 @@ Projekt stworzony przez Romana Gorza (pomysł, kierunek, testy na własnej insta
 8. [Struktura repozytorium](#struktura-repozytorium)
 
 ## Co dostajesz
-- **Karta** `custom:pelletcan-lite-card`: ekran główny, okno **Paliwo** (zapełnienie zbiornika), **Ogrzewanie 1 (CO)**, **Woda (CWU)**, **Palnik** oraz **Menu** z jedną pozycją „Informacje o programie”. Zero edycji: nastawy, tryb pracy, harmonogram i podawanie nie są klikalne.
+- **Karta** `custom:pelletcan-lite-card`: ekran główny, okno **Paliwo** (zapełnienie zbiornika), **Ogrzewanie 1 (CO)**, **Woda (CWU)**, **Palnik** oraz **Menu** z ekranami Kocioł, Palnik, Ogrzewanie obwód 1, Ciepła woda, Informacje i Alarmy – tylko poziom podstawowy, bez „Poziom menu”. Zero edycji: do ekranów, trybu ogrzewania i harmonogramu można wejść, ale nic nie da się zmienić.
 - **Firmware** w dwóch plikach: `esphome/PelletCAN_lite.yaml` (ten wgrywasz do ESP) i `esphome/PelletCAN_lite_packages.yaml` (rdzeń, ściągany z GitHuba przy kompilacji). Jeden obieg CO, bez usług zapisu.
 
 Potrzebujesz pełnej wersji (zapis nastaw, harmonogramy, test wyjść, historia alarmów)? Zobacz [PelletCAN](https://github.com/GieOeRZet/PelletCAN).
