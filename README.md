@@ -112,3 +112,9 @@ Karta sprawdza plik `version.json` **tego** repozytorium (`GieOeRZet/PelletCAN_l
 - `tools/` – skrypty budujące kartę lite.
 - `esphome/` – pliki firmware i wzór `secrets.yaml`.
 - `version.json` – wersje karty i firmware (karta pokazuje dostępne aktualizacje w „Informacje o programie”).
+
+## Ważne zastrzeżenia
+- Projekt niezależny i nieoficjalny: nie jest związany z firmą Tekla ani Estyma, nie jest przez nie zatwierdzony i nie zastępuje oryginalnych produktów. Jest z nimi zgodny i opiera się na ich rozwiązaniach (CAN, CANopen) w celu współpracy z Home Assistant.
+- Wszelkie prawa do materiałów producentów (wygląd panelu, grafiki, teksty, nazwy i znaki towarowe Tekla, Estyma, Igneo, Igneo Touch) należą do nich. Grafiki panela są w repozytorium tylko jako opcjonalna funkcja zgodności (`grafiki: pelne`). Na wyraźną prośbę właściciela praw wskazana treść zostanie usunięta (zgłoszenie przez [Issues](https://github.com/GieOeRZet/PelletCAN_lite/issues)).
+- Używasz na własną odpowiedzialność; podłączenie do magistrali CAN może wpłynąć na gwarancję. Szczegóły: [LICENSE](LICENSE) i [pełna wersja PelletCAN](https://github.com/GieOeRZet/PelletCAN#ważne-zastrzeżenia).
+
