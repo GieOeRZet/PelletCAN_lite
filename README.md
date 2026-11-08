@@ -8,7 +8,7 @@ Projekt stworzony przez Romana Gorza (pomysł, kierunek, testy na własnej insta
 
 > ⚠️ Projekt nieoficjalny – nie zastępuje produktów Estyma. Używasz na własną odpowiedzialność; firmware tylko czyta rejestry kotła, ale podłączenie do magistrali CAN zawsze robisz sam.
 
-> Zrzuty ekranu pochodzą z danych testowych (nie z działającego kotła).
+> Zrzuty ekranu pochodzą z karty lite 2.1 w Home Assistant, z danymi z kotła (karta tylko odczytuje).
 
 | Ekran główny | Paliwo | Ogrzewanie 1 (CO) |
 |---|---|---|
@@ -18,21 +18,52 @@ Projekt stworzony przez Romana Gorza (pomysł, kierunek, testy na własnej insta
 |---|---|---|
 | ![CWU](docs/img/04-water.png) | ![Palnik](docs/img/05-burn.png) | ![Menu](docs/img/06-menu.png) |
 
+| Kocioł | Nastawy palnika | Nastawy CO |
+|---|---|---|
+| ![Kocioł](docs/img/07-boiler.png) | ![Palnik](docs/img/08-burner-settings.png) | ![CO](docs/img/09-heat-settings.png) |
+
+| Nastawy CWU | Informacje | Historia alarmów |
+|---|---|---|
+| ![CWU](docs/img/10-water-settings.png) | ![Info](docs/img/11-info.png) | ![Alarmy](docs/img/12-alarms.png) |
+
+| Harmonogram | Szybkie ustawienia (podgląd) |
+|---|---|
+| ![Harmonogram](docs/img/13-schedule.png) | ![Szybkie](docs/img/14-quick.png) |
+
 ## Spis treści
 1. [Co dostajesz](#co-dostajesz)
-2. [Dolny pasek ekranu głównego](#dolny-pasek-ekranu-głównego)
-3. [Sprzęt](#sprzęt)
-4. [Firmware – instalacja](#firmware--instalacja)
-5. [Karta – instalacja (HACS)](#karta--instalacja-hacs)
-6. [Aktualizacje](#aktualizacje)
-7. [Rozwiązywanie problemów](#rozwiązywanie-problemów)
-8. [Struktura repozytorium](#struktura-repozytorium)
+2. [Szybki start – od zera do działającej karty](#szybki-start--od-zera-do-działającej-karty)
+3. [Dolny pasek ekranu głównego](#dolny-pasek-ekranu-głównego)
+4. [Sprzęt](#sprzęt)
+5. [Firmware – instalacja](#firmware--instalacja)
+6. [Karta – instalacja (HACS)](#karta--instalacja-hacs)
+7. [Aktualizacje](#aktualizacje)
+8. [Rozwiązywanie problemów](#rozwiązywanie-problemów)
+9. [Struktura repozytorium](#struktura-repozytorium)
 
 ## Co dostajesz
 - **Karta** `custom:pelletcan-card-lite`: ekran główny, okno **Paliwo** (zapełnienie zbiornika), **Ogrzewanie 1 (CO)**, **Woda (CWU)**, **Palnik** oraz **Menu** z ekranami Kocioł, Palnik, Ogrzewanie obwód 1, Ciepła woda, Informacje i Alarmy – tylko poziom podstawowy, bez „Poziom menu”. Zero edycji: do ekranów, trybu ogrzewania i harmonogramu można wejść, ale nic nie da się zmienić.
 - **Firmware** w dwóch plikach: `esphome/PelletCAN_lite.yaml` (ten wgrywasz do ESP) i `esphome/PelletCAN_lite_packages.yaml` (rdzeń, ściągany z GitHuba przy kompilacji). Jeden obieg CO, bez usług zapisu.
 
 Potrzebujesz pełnej wersji (zapis nastaw, harmonogramy, test wyjść, historia alarmów)? Zobacz [PelletCAN](https://github.com/GieOeRZet/PelletCAN).
+
+## Szybki start – od zera do działającej karty
+Czego potrzebujesz: Home Assistant z dodatkiem **ESPHome** (Ustawienia → Dodatki), zainstalowanego **HACS**, płytki XIAO ESP32-C6 z modułem CAN (patrz [Sprzęt](#sprzęt)) i kabla USB-C do pierwszego wgrania.
+
+1. **Podłącz sprzęt** do magistrali CAN kotła (CAN-H, CAN-L, masa) i do zasilania 5 V. Kocioł musi mieć włączony panel Igneo Touch.
+2. **Plik `secrets.yaml`** – w ESPHome (przycisk **Secrets** w prawym górnym rogu) wklej i uzupełnij:
+   ```yaml
+   wifi_ssid_iot: "NAZWA_SIECI"                 # sieć 2,4 GHz (ESP32-C6 nie widzi 5 GHz)
+   wifi_pass: "HASLO_WIFI"
+   esp_api_key_tekla_CAN: "KLUCZ_API"           # 32 bajty w base64, patrz niżej
+   ota_pass: "HASLO_OTA"                        # dowolne hasło do aktualizacji przez Wi-Fi
+   ```
+   Klucz API wygenerujesz w terminalu poleceniem `openssl rand -base64 32` albo na stronie <https://esphome.io/components/api.html> (przycisk „generate”). Wzór: [`esphome/secrets.example.yaml`](esphome/secrets.example.yaml). Nazwy kluczy muszą być dokładnie takie, bo odwołuje się do nich plik firmware.
+3. **Nowe urządzenie w ESPHome** → **Skip** (bez kreatora) → wklej całą zawartość [`esphome/PelletCAN_lite.yaml`](esphome/PelletCAN_lite.yaml). Zmień w `substitutions` tylko to, co potrzebne (stały IP, nazwa, antena). Rdzeń firmware pobiera się sam z GitHuba.
+4. **Install → Plug into this computer / Manual download** – pierwsze wgranie przez USB (na XIAO przytrzymaj BOOT przy podłączaniu, jeśli port się nie pojawia). Kolejne aktualizacje idą już przez Wi-Fi.
+5. **Dodaj urządzenie w HA**: Ustawienia → Urządzenia i usługi → ESPHome (zwykle wykrywa się samo; klucz API z `secrets.yaml`). Powinny pojawić się encje „Tekla …”.
+6. **Zainstaluj kartę** przez HACS (sekcja [Karta](#karta--instalacja-hacs)), odśwież przeglądarkę i dodaj kartę `custom:pelletcan-card-lite` do dashboardu.
+7. **Sprawdź**: na ekranie głównym powinna być temperatura kotła i stan pracy; encja „CAN OK” w HA = włączone. Jeśli widzisz „-”, zobacz [Rozwiązywanie problemów](#rozwiązywanie-problemów).
 
 ## Dolny pasek ekranu głównego
 Przyciski na dolnej belce pokazują też stany:
