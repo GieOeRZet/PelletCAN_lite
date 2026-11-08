@@ -1,5 +1,5 @@
-/* PelletCAN lite v2.0 - karta tylko do odczytu, poziom podstawowy (ekran glowny, paliwo, CO, CWU, palnik, nastawy, harmonogram, alarmy, INFO).
-   Typ karty: custom:pelletcan-lite-card. Plik generowany: tools/build_lite.py (zrodlo: repo PelletCAN). Nie edytuj recznie.
+/* PelletCAN lite v2.1 - karta tylko do odczytu, poziom podstawowy (ekran glowny, paliwo, CO, CWU, palnik, nastawy, harmonogram, alarmy, INFO).
+   Typ karty: custom:pelletcan-card-lite. Plik generowany: tools/build_lite.py (zrodlo: repo PelletCAN). Nie edytuj recznie.
    Karta zawiera wylacznie kod podgladu: bez zapisu do kotla i bez ekranow wyzszych poziomow menu. */
 /* PelletCAN-card v1.10 - JEDEN plik wejsciowy karty Tekla/Estyma Igneo Touch (zastepuje lancuch pelletcan-lite-core-v78 ... v86).
    Rejestruje karte custom:pelletcan-lite-core (tryb lite: lite: true w konfiguracji karty; typ pelletcan-lite-core_lite = alias).
@@ -794,7 +794,7 @@ if (!customElements.get('pelletcan-lite-core-editor')) customElements.define('pe
     })();
 
     const C = customElements.get('pelletcan-lite-core');
-    if (!C) { console.error('pelletcan-lite-card: brak elementu po zaladowaniu'); return; }
+    if (!C) { console.error('pelletcan-card-lite: brak elementu po zaladowaniu'); return; }
     // key -> { tytul, rola encji, min, max, krok, miejsca po przecinku }
     const PR = [];
     C.prototype._po = function (k) {
@@ -1233,9 +1233,9 @@ if (!customElements.get('pelletcan-lite-core-editor')) customElements.define('pe
     };
 
 
-    if (!customElements.get('pelletcan-lite-card')) customElements.define('pelletcan-lite-card', class extends C {});   // alias typu: custom:pelletcan-lite-card = custom:pelletcan-lite-core
+    if (!customElements.get('pelletcan-card-lite')) customElements.define('pelletcan-card-lite', class extends C {});   // alias typu: custom:pelletcan-card-lite = custom:pelletcan-lite-core
     window.customCards = window.customCards || [];   // wybor karty w edytorze dashboardu
-    if (!window.customCards.some(c => c.type === 'pelletcan-lite-card')) window.customCards.push({ type: 'pelletcan-lite-card', name: 'PelletCAN lite', description: 'PelletCAN lite: podgląd kotła pelletowego (tylko odczyt)', preview: false });
+    if (!window.customCards.some(c => c.type === 'pelletcan-card-lite')) window.customCards.push({ type: 'pelletcan-card-lite', name: 'PelletCAN-card lite', description: 'PelletCAN lite: podgląd kotła pelletowego (tylko odczyt)', preview: false });
     // ---- edytor wizualny: sekcje wg ekranow i menu karty ----
     const PR2L = {}; ((W && W.PR) || []).concat((W && W.PR2) || []).forEach(c => { PR2L[c.r] = c.t; });
     const LBL = {}; D.ENT_GROUPS.forEach(g => g[1].forEach(f => { LBL[f[0]] = f[1]; }));
@@ -1350,10 +1350,10 @@ if (!customElements.get('pelletcan-lite-core-editor')) customElements.define('pe
         if (Object.keys(add).length) this._emit(Object.assign({}, this._cfg, { entities: Object.assign({}, add, ex) }));
       }
     }
-    if (!customElements.get('pelletcan-lite-card-editor')) customElements.define('pelletcan-lite-card-editor', IgneoEditor);
-    C.getConfigElement = () => document.createElement('pelletcan-lite-card-editor');
+    if (!customElements.get('pelletcan-card-lite-editor')) customElements.define('pelletcan-card-lite-editor', IgneoEditor);
+    C.getConfigElement = () => document.createElement('pelletcan-card-lite-editor');
     C.getStubConfig = () => ({ screen: 'main' });
-    const PC = customElements.get('pelletcan-lite-card'); if (PC) { PC.getConfigElement = C.getConfigElement; PC.getStubConfig = C.getStubConfig; }
+    const PC = customElements.get('pelletcan-card-lite'); if (PC) { PC.getConfigElement = C.getConfigElement; PC.getStubConfig = C.getStubConfig; }
 
     })();
     // ---- modul v9.3: aktualizacje (dioda w menu, ekran INFO, changelog z GitHuba) ----
@@ -1361,7 +1361,7 @@ if (!customElements.get('pelletcan-lite-core-editor')) customElements.define('pe
     const C = customElements.get('pelletcan-lite-core');
     if (C.prototype.__v93) return;
     C.prototype.__v93 = true;
-    const CARD_VER = '2.0';
+    const CARD_VER = '2.1';
     const MAN = 'https://raw.githubusercontent.com/GieOeRZet/PelletCAN_lite/main/version.json';
     const SK = 'pelletcan_lite_upd_skip';
     const U = window.__pcLiteUpd = window.__pcLiteUpd || { m: null, t: 0 };
@@ -1483,5 +1483,5 @@ if (!customElements.get('pelletcan-lite-core-editor')) customElements.define('pe
       R.addEventListener('pointerdown', guard, true);
     };
     })();
-  } catch (e) { console.error('pelletcan-lite-card', e); }
+  } catch (e) { console.error('pelletcan-card-lite', e); }
 })();

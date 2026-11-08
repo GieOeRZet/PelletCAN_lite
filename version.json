@@ -8,10 +8,10 @@
     ]
   },
   "card": {
-    "version": "2.0",
+    "version": "2.1",
     "changelog": [
-      "Karta lite zbudowana z pełnej karty 1.39: tylko poziom podstawowy, wszystko tylko do podglądu (można wejść w ekrany, nic nie da się zmienić).",
-      "Usunięte menu „Poziom menu” oraz wszystkie pozycje spoza poziomu podstawowego; dodane ekrany nastaw Kocioł/Palnik/CO/CWU, Informacje i alarmy (odczyt)."
+      "Zmiana nazwy elementu: custom:pelletcan-card-lite (jak oryginał z dopiskiem lite) – zamiast pelletcan-lite-card.",
+      "Drobne poprawki interfejsu, nowe zrzuty ekranu w README."
     ]
   }
 }
