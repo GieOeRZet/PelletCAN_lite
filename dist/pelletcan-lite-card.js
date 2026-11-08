@@ -1,4 +1,4 @@
-/* PelletCAN lite v2.3 - karta tylko do odczytu, poziom podstawowy (ekran glowny, paliwo, CO, CWU, palnik, nastawy, harmonogram, alarmy, INFO).
+/* PelletCAN lite v2.4 - karta tylko do odczytu, poziom podstawowy (ekran glowny, paliwo, CO, CWU, palnik, nastawy, harmonogram, alarmy, INFO).
    Typ karty: custom:pelletcan-card-lite. Plik generowany: tools/build_lite.py (zrodlo: repo PelletCAN). Nie edytuj recznie.
    Karta zawiera wylacznie kod podgladu: bez zapisu do kotla i bez ekranow wyzszych poziomow menu. */
 /* PelletCAN-card - JEDEN plik wejsciowy karty Tekla/Estyma Igneo Touch (wersja karty: patrz CARD_VER nizej i version.json).
@@ -1152,9 +1152,9 @@ if (!customElements.get('pelletcan-lite-core-editor')) customElements.define('pe
       const seq = (ns, w, h, on) => `<span class="sp ${on ? 'on' : ''}" style="width:${(w * K).toFixed(2)}cqw;height:${(h * K).toFixed(2)}cqw">${ns.map(n => img(n)).join('')}</span>`;
       const oc = C.prototype._css;
       C.prototype._css = function () {
-        const BS = { 11: [105, 126], 12: [108, 141] }, bt = this._cfg && FULL(this) ? BS[+this._cfg.boiler_image] : null;
-        // obrazy kotla 11/12 maja inne proporcje niz domyslny: skala 1:1 jak w panelu, srodek i podstawa jak dla kociola domyslnego
-        const boil = bt ? `.boil{width:${(bt[0] * K).toFixed(2)}cqw!important;left:${(15 - bt[0] * K / 2).toFixed(2)}cqw!important;top:${(35.5 - bt[1] * K).toFixed(2)}cqw!important;height:auto!important}` : '';
+        const BS = { 11: [105, 126], 12: [108, 141], 13: [82, 145], 14: [54, 100] }, bt = this._cfg && FULL(this) ? BS[+this._cfg.boiler_image] : null;
+        // obrazy kotla 11-14 maja rozne wymiary: skala 1:1 jak w panelu, srodek i podstawa jak dla kociola domyslnego
+        const boil = bt ? `.boil{width:${(bt[0] * K).toFixed(2)}cqw!important;left:${(15 - bt[0] * K / 2).toFixed(2)}cqw!important;top:${Math.max(35.5 - bt[1] * K, 10).toFixed(2)}cqw!important;height:auto!important}` : '';
         const burn = FULL(this) ? `.burn{left:6.9cqw!important;top:19.1cqw!important;width:${(149 * K).toFixed(2)}cqw!important;height:auto!important}` : '';   // obraz palnika 17 (149x99 px) 1:1 jak w panelu
         return oc.call(this) + boil + burn + `.sp{position:relative;display:inline-block;line-height:0}.sp img,.mbs{mix-blend-mode:screen}.sp img{position:absolute;left:0;top:0;width:100%;height:100%;opacity:0}.sp img:first-child{opacity:1}
         .sp.on img{animation:spfr .45s linear infinite}.sp.on img:nth-child(2){animation-delay:.15s}.sp.on img:nth-child(3){animation-delay:.3s}
@@ -1197,9 +1197,9 @@ if (!customElements.get('pelletcan-lite-core-editor')) customElements.define('pe
       };
       const T = window.TEKLA_IMG = window.TEKLA_IMG || {}, IM2 = window.__pcLiteImg = window.__pcLiteImg || {};
       let BC = null;
-      const bi = c => { if (c !== undefined) BC = c; if (!FULL(BC && { _cfg: BC })) return; T.burner = U(17); T.boiler = U([11, 12, 13].includes(+(BC && BC.boiler_image)) ? +BC.boiler_image : 13); };
+      const bi = c => { if (c !== undefined) BC = c; if (!FULL(BC && { _cfg: BC })) return; T.burner = U(17); T.boiler = U([11, 12, 13, 14].includes(+(BC && BC.boiler_image)) ? +BC.boiler_image : 13); };
       bi(null);
-      window.addEventListener('pcl-img', () => { if (!FULL(BC && { _cfg: BC })) return; if (T.boiler !== U([11, 12, 13].includes(+(BC && BC.boiler_image)) ? +BC.boiler_image : 13) || T.burner !== U(17)) { bi(); window.dispatchEvent(new Event('pcl-img')); } });
+      window.addEventListener('pcl-img', () => { if (!FULL(BC && { _cfg: BC })) return; if (T.boiler !== U([11, 12, 13, 14].includes(+(BC && BC.boiler_image)) ? +BC.boiler_image : 13) || T.burner !== U(17)) { bi(); window.dispatchEvent(new Event('pcl-img')); } });
       const sc3 = C.prototype.setConfig;
       C.prototype.setConfig = function (c) { bi(c); return sc3.call(this, c); };
       window.dispatchEvent(new Event('pcl-img'));
@@ -1268,7 +1268,7 @@ if (!customElements.get('pelletcan-lite-core-editor')) customElements.define('pe
         const c = this._cfg, ids = this._ids(), pf = pfOf(c, ids), keys = keysAll(), ex = c.entities || {};
         const d = {
           screen: c.screen || 'main', language: ({ dk: 'da', se: 'sv', cz: 'cs', est: 'et' }[String(c.language || 'pl').toLowerCase()] || c.language || 'pl'), device: c.entity_prefix ? String(c.entity_prefix) : 'auto',
-          grafiki: c.grafiki === 'pelne' ? 'pelne' : 'domyslne', boiler_image: [11, 12, 13].includes(+c.boiler_image) ? String(c.boiler_image) : '13', demo: !!c.demo,
+          grafiki: c.grafiki === 'pelne' ? 'pelne' : 'domyslne', boiler_image: [11, 12, 13, 14].includes(+c.boiler_image) ? String(c.boiler_image) : '13', demo: !!c.demo,
         };
         Object.keys(keys).forEach(r => { d['e_' + r] = ex[r] || (ids.length ? findRole(ids, r, keys[r], pf, this._hass.states) : ''); });   // pola od razu pokazuja wykryte encje
         return d;
@@ -1297,7 +1297,7 @@ if (!customElements.get('pelletcan-lite-core-editor')) customElements.define('pe
             { name: 'language', label: 'Język / Language', selector: { select: { mode: 'dropdown', options: [{ value: 'auto', label: 'Auto (język Home Assistant)' }].concat(Object.keys((window.__pcLiteLang || {}).names || {}).map(k => ({ value: k, label: window.__pcLiteLang.names[k] }))) } } },
             { name: 'device', label: 'Urządzenie (prefiks encji)', selector: { select: { mode: 'dropdown', custom_value: true, options: [{ value: 'auto', label: 'Automatycznie' + (devs.length ? ' (' + pf + ')' : '') }].concat(devs.map(d => ({ value: d.p, label: d.p }))) } } },
             { name: 'grafiki', label: 'Grafiki panela', selector: { select: { mode: 'dropdown', options: [{ value: 'domyslne', label: 'Domyślne (tylko zbiornik paliwa)' }, { value: 'pelne', label: 'Pełne (wentylator, podajniki, zawór, grzałka, kocioł, palnik)' }] } } },
-            { name: 'boiler_image', label: 'Obraz kotła (grafiki pełne)', selector: { select: { mode: 'dropdown', options: [{ value: '11', label: 'Typ 11' }, { value: '12', label: 'Typ 12' }, { value: '13', label: 'Typ 13 (domyślny)' }] } } },
+            { name: 'boiler_image', label: 'Obraz kotła (grafiki pełne)', selector: { select: { mode: 'dropdown', options: [{ value: '11', label: 'Typ 11' }, { value: '12', label: 'Typ 12' }, { value: '13', label: 'Typ 13 (domyślny)' }, { value: '14', label: 'Typ 14 (szary)' }] } } },
           ],
         }, {
           type: 'expandable', title: 'Zaawansowane (zwykle zbędne)', flatten: true, schema: [
@@ -1362,7 +1362,7 @@ if (!customElements.get('pelletcan-lite-core-editor')) customElements.define('pe
     const C = customElements.get('pelletcan-lite-core');
     if (C.prototype.__v93) return;
     C.prototype.__v93 = true;
-    const CARD_VER = '2.3';
+    const CARD_VER = '2.4';
     const MAN = 'https://raw.githubusercontent.com/GieOeRZet/PelletCAN_lite/main/version.json';
     const SK = 'pelletcan_lite_upd_skip';
     const U = window.__pcLiteUpd = window.__pcLiteUpd || { m: null, t: 0 };

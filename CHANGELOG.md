@@ -2,6 +2,9 @@
 
 Historia zmian firmware: [CHANGELOG-firmware.md](CHANGELOG-firmware.md).
 
+## 2.4
+- Obrazy kotła 11–14 (`grafiki: pelne`) w skali 1:1 jak na panelu, bez zachodzenia na zegar; typ 14 w edytorze. Zmiana z pełnej karty 1.42.
+
 ## 2.3
 - Ekran Palnik przy `grafiki: pelne`: obraz palnika w skali 1:1 jak na panelu i w tym samym miejscu (wcześniej mniejszy i przesunięty). Zmiana z pełnej karty 1.41.
 
