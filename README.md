@@ -29,7 +29,7 @@ Projekt stworzony przez Romana Gorza (pomysł, kierunek, testy na własnej insta
 8. [Struktura repozytorium](#struktura-repozytorium)
 
 ## Co dostajesz
-- **Karta** `custom:pelletcan-lite-card`: ekran główny, okno **Paliwo** (zapełnienie zbiornika), **Ogrzewanie 1 (CO)**, **Woda (CWU)**, **Palnik** oraz **Menu** z ekranami Kocioł, Palnik, Ogrzewanie obwód 1, Ciepła woda, Informacje i Alarmy – tylko poziom podstawowy, bez „Poziom menu”. Zero edycji: do ekranów, trybu ogrzewania i harmonogramu można wejść, ale nic nie da się zmienić.
+- **Karta** `custom:pelletcan-card-lite`: ekran główny, okno **Paliwo** (zapełnienie zbiornika), **Ogrzewanie 1 (CO)**, **Woda (CWU)**, **Palnik** oraz **Menu** z ekranami Kocioł, Palnik, Ogrzewanie obwód 1, Ciepła woda, Informacje i Alarmy – tylko poziom podstawowy, bez „Poziom menu”. Zero edycji: do ekranów, trybu ogrzewania i harmonogramu można wejść, ale nic nie da się zmienić.
 - **Firmware** w dwóch plikach: `esphome/PelletCAN_lite.yaml` (ten wgrywasz do ESP) i `esphome/PelletCAN_lite_packages.yaml` (rdzeń, ściągany z GitHuba przy kompilacji). Jeden obieg CO, bez usług zapisu.
 
 Potrzebujesz pełnej wersji (zapis nastaw, harmonogramy, test wyjść, historia alarmów)? Zobacz [PelletCAN](https://github.com/GieOeRZet/PelletCAN).
@@ -60,7 +60,7 @@ Ustawienia w pliku użytkownika: `wifi_ssid`, `wifi_password`, `ap_pass` (hasło
 2. HACS dodaje zasób `/hacsfiles/PelletCAN_lite/pelletcan-lite-card.js` (jeśli nie – dodaj ręcznie jako moduł JavaScript). Odśwież przeglądarkę (Ctrl+F5).
 3. Dodaj kartę:
 ```yaml
-type: custom:pelletcan-lite-card
+type: custom:pelletcan-card-lite
 ```
 Encje karta znajduje sama po końcówkach nazw (urządzenie „Tekla”). Gdy nazwałeś urządzenie inaczej, dodaj `entity_prefix: moj_prefiks` lub użyj edytora karty.
 
